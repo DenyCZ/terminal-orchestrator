@@ -25,3 +25,6 @@ Thumbs.db
 
 # Electron
 release/
+
+.automaker
+nul

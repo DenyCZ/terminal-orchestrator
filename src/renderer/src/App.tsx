@@ -300,7 +300,7 @@ function App() {
   ]
 
   const newWorktreeFields: PromptField[] = [
-    { key: 'sourcePath', label: 'Source Path', type: 'text', placeholder: activeProject?.rootDirectory || 'Path to git repository', required: true },
+    { key: 'sourcePath', label: 'Source Path', type: 'text', placeholder: 'Path to git repository', defaultValue: activeProject?.rootDirectory || '', required: true },
     { key: 'branch', label: 'Branch', type: 'text', placeholder: 'Branch name', required: true },
     { 
       key: 'createNewBranch', 

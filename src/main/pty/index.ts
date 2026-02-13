@@ -136,15 +136,23 @@ async function createPty(
   try {
     // Try to load node-pty
     const pty = await import('node-pty')
-    
-    return pty.spawn(shell, args, {
+
+    // Build options - encoding not supported on Windows
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ptyOptions: any = {
       name: 'xterm-256color',
       cols: options.cols,
       rows: options.rows,
       cwd: options.cwd,
-      env: options.env,
-      encoding: 'utf8'
-    })
+      env: options.env
+    }
+
+    // encoding option is not supported on Windows
+    if (process.platform !== 'win32') {
+      ptyOptions.encoding = 'utf8'
+    }
+
+    return pty.spawn(shell, args, ptyOptions)
   } catch (error) {
     console.warn('node-pty not available, falling back to child_process:', error)
     

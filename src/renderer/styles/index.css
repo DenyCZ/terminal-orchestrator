@@ -307,6 +307,47 @@ html, body, #root {
   margin: 0 2px;
 }
 
+.inline-prompt-button {
+  padding: 6px 16px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+  margin-right: 8px;
+}
+
+.inline-prompt-button-create {
+  background: #4ec9b0;
+  color: #1e1e1e;
+  border: 1px solid #4ec9b0;
+}
+
+.inline-prompt-button-create:hover {
+  background: #3da890;
+  border-color: #3da890;
+}
+
+.inline-prompt-button-cancel {
+  background: transparent;
+  color: #9d9d9d;
+  border: 1px solid #3c3c3c;
+}
+
+.inline-prompt-button-cancel:hover {
+  background: #3c3c3c;
+  color: #d4d4d4;
+}
+
+.inline-prompt-field.error .inline-prompt-input,
+.inline-prompt-field.error .inline-prompt-select {
+  border-color: #f44336;
+}
+
+.inline-prompt-field.error .inline-prompt-label {
+  color: #f44336;
+}
+
 /* Keyboard shortcut hint overlay */
 .keyboard-shortcuts-overlay {
   position: fixed;

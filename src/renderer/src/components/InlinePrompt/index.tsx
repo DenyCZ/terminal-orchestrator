@@ -31,6 +31,7 @@ export default function InlinePrompt({
 }: InlinePromptProps) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [currentFieldIndex, setCurrentFieldIndex] = useState(0);
+  const [validationErrors, setValidationErrors] = useState<Set<string>>(new Set());
   const inputRefs = useRef<(HTMLInputElement | HTMLSelectElement | null)[]>([]);
 
   // Initialize values when opening
@@ -42,6 +43,7 @@ export default function InlinePrompt({
       });
       setValues(initialValues);
       setCurrentFieldIndex(0);
+      setValidationErrors(new Set());
       
       // Focus first input after render
       setTimeout(() => inputRefs.current[0]?.focus(), 50);
@@ -95,12 +97,23 @@ export default function InlinePrompt({
 
   const handleSubmit = () => {
     // Validate required fields
-    const isValid = fields.every(field => 
-      !field.required || values[field.key]?.trim()
-    );
+    const errors = new Set<string>();
+    fields.forEach(field => {
+      if (field.required && !values[field.key]?.trim()) {
+        errors.add(field.key);
+      }
+    });
     
-    if (isValid) {
+    if (errors.size === 0) {
       onSubmit(values);
+    } else {
+      setValidationErrors(errors);
+      // Focus first invalid field
+      const firstErrorKey = Array.from(errors)[0];
+      const firstErrorIndex = fields.findIndex(f => f.key === firstErrorKey);
+      if (firstErrorIndex >= 0) {
+        inputRefs.current[firstErrorIndex]?.focus();
+      }
     }
   };
 
@@ -127,17 +140,24 @@ export default function InlinePrompt({
               key={field.key}
               className={`inline-prompt-field ${
                 index === currentFieldIndex ? 'active' : ''
-              }`}
+              } ${validationErrors.has(field.key) ? 'error' : ''}`}
             >
               <label className="inline-prompt-label">
-                {field.label}:
+                {field.label}{field.required ? ' *' : ''}:
               </label>
               
               {field.type === 'select' ? (
                 <select
                   ref={el => { inputRefs.current[index] = el; }}
                   value={values[field.key] || ''}
-                  onChange={e => setValues(v => ({ ...v, [field.key]: e.target.value }))}
+                  onChange={e => {
+                    setValues(v => ({ ...v, [field.key]: e.target.value }));
+                    setValidationErrors(errs => {
+                      const newErrors = new Set(errs);
+                      newErrors.delete(field.key);
+                      return newErrors;
+                    });
+                  }}
                   onKeyDown={e => handleKeyDown(e, index)}
                   className="inline-prompt-select"
                 >
@@ -152,7 +172,14 @@ export default function InlinePrompt({
                   ref={el => { inputRefs.current[index] = el; }}
                   type="text"
                   value={values[field.key] || ''}
-                  onChange={e => setValues(v => ({ ...v, [field.key]: e.target.value }))}
+                  onChange={e => {
+                    setValues(v => ({ ...v, [field.key]: e.target.value }));
+                    setValidationErrors(errs => {
+                      const newErrors = new Set(errs);
+                      newErrors.delete(field.key);
+                      return newErrors;
+                    });
+                  }}
                   onKeyDown={e => handleKeyDown(e, index)}
                   placeholder={field.placeholder}
                   className="inline-prompt-input"
@@ -166,6 +193,20 @@ export default function InlinePrompt({
 
         {/* Actions */}
         <div className="inline-prompt-actions">
+          <button
+            type="button"
+            className="inline-prompt-button inline-prompt-button-create"
+            onClick={handleSubmit}
+          >
+            Create
+          </button>
+          <button
+            type="button"
+            className="inline-prompt-button inline-prompt-button-cancel"
+            onClick={onCancel}
+          >
+            Cancel
+          </button>
           <span className="inline-prompt-hint">
             <kbd>Enter</kbd> confirm • <kbd>Esc</kbd> cancel
           </span>

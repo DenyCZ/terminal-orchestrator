@@ -122,6 +122,33 @@ export function listWorktrees(repoPath: string): { path: string; branch: string;
 }
 
 /**
+ * Check if a branch exists (local or remote)
+ */
+export function branchExists(repoPath: string, branchName: string): boolean {
+  try {
+    // Check for local branch
+    const localOutput = execSync(`git branch --list "${branchName}"`, {
+      cwd: repoPath,
+      stdio: 'pipe',
+      encoding: 'utf-8'
+    })
+    if (localOutput.trim().length > 0) {
+      return true
+    }
+    
+    // Check for remote branch
+    const remoteOutput = execSync(`git branch --list -r "origin/${branchName}"`, {
+      cwd: repoPath,
+      stdio: 'pipe',
+      encoding: 'utf-8'
+    })
+    return remoteOutput.trim().length > 0
+  } catch {
+    return false
+  }
+}
+
+/**
  * Create a new git worktree
  */
 export async function createWorktree(options: WorktreeCreateOptions): Promise<WorktreeCreateResult> {
@@ -161,9 +188,12 @@ export async function createWorktree(options: WorktreeCreateOptions): Promise<Wo
       }
     }
 
+    // Check if branch exists and adjust createBranch flag accordingly
+    const branchExistsInRepo = branchExists(gitRoot, branch)
+    const shouldCreateBranch = !branchExistsInRepo
+
     // Build the git worktree add command
-    const createBranchFlag = createBranch ? '-b' : ''
-    const command = createBranch
+    const command = shouldCreateBranch
       ? `git worktree add -b "${branch}" "${finalWorktreePath}"`
       : `git worktree add "${finalWorktreePath}" "${branch}"`
 
