@@ -1,0 +1,367 @@
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { useAppStore } from './store'
+import Sidebar from './components/Sidebar'
+import TerminalView from './components/TerminalView'
+import Toolbar from './components/Toolbar'
+import CommandPalette from './components/CommandPalette'
+import InlinePrompt, { type PromptField } from './components/InlinePrompt'
+import HelpModal from './components/HelpModal'
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
+
+type PromptMode = 'none' | 'new-terminal' | 'new-project'
+
+function App() {
+  const { 
+    isLoading, 
+    loadConfig, 
+    activeTerminalId, 
+    activeProjectId, 
+    projects,
+    setActiveTerminal,
+    startTerminal,
+    stopTerminal,
+    restartTerminal,
+    deleteTerminal,
+    createTerminal,
+    createProject,
+    settings
+  } = useAppStore()
+
+  // Command palette state
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
+  const [commandPaletteQuery, setCommandPaletteQuery] = useState('')
+  
+  // Inline prompt state
+  const [promptMode, setPromptMode] = useState<PromptMode>('none')
+  
+  // Help modal state
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false)
+  
+  // Track if we've checked for first-time startup
+  const hasCheckedStartup = useRef(false)
+
+  // Load config on mount
+  useEffect(() => {
+    loadConfig()
+  }, [loadConfig])
+
+  // Zero-config startup experience: auto-open command palette on first load
+  // when there are no projects, or when no terminal is selected
+  useEffect(() => {
+    if (isLoading || hasCheckedStartup.current) return
+    hasCheckedStartup.current = true
+    
+    // Small delay to ensure UI is ready
+    const timer = setTimeout(() => {
+      if (projects.length === 0) {
+        // First-time user - show command palette with helpful suggestions
+        setIsCommandPaletteOpen(true)
+      }
+    }, 100)
+    
+    return () => clearTimeout(timer)
+  }, [isLoading, projects.length])
+
+  // Get active entities
+  const activeProject = projects.find(p => p.id === activeProjectId)
+  const activeTerminal = activeProject?.terminals.find(t => t.id === activeTerminalId)
+
+  // Terminal navigation helpers
+  const getActiveProjectTerminals = useCallback(() => {
+    return activeProject?.terminals || []
+  }, [activeProject])
+
+  const nextTerminal = useCallback(() => {
+    const terminals = getActiveProjectTerminals()
+    if (terminals.length === 0) return
+    
+    const currentIndex = terminals.findIndex(t => t.id === activeTerminalId)
+    const nextIndex = (currentIndex + 1) % terminals.length
+    setActiveTerminal(terminals[nextIndex].id)
+  }, [getActiveProjectTerminals, activeTerminalId, setActiveTerminal])
+
+  const prevTerminal = useCallback(() => {
+    const terminals = getActiveProjectTerminals()
+    if (terminals.length === 0) return
+    
+    const currentIndex = terminals.findIndex(t => t.id === activeTerminalId)
+    const prevIndex = currentIndex <= 0 ? terminals.length - 1 : currentIndex - 1
+    setActiveTerminal(terminals[prevIndex].id)
+  }, [getActiveProjectTerminals, activeTerminalId, setActiveTerminal])
+
+  // Focus terminal - quick jump to terminal input
+  const handleFocusTerminal = useCallback(() => {
+    // Focus the xterm textarea
+    const xtermTextarea = document.querySelector('.xterm-helper-textarea') as HTMLTextAreaElement
+    if (xtermTextarea) {
+      xtermTextarea.focus()
+    } else {
+      // Fallback: click on the terminal container
+      const terminalContainer = document.querySelector('.xterm')
+      if (terminalContainer) {
+        (terminalContainer as HTMLElement).click()
+      }
+    }
+  }, [])
+
+  // Keyboard shortcut handlers
+  const handleOpenCommandPalette = useCallback(() => {
+    setCommandPaletteQuery('')
+    setIsCommandPaletteOpen(true)
+  }, [])
+
+  const handleCloseCommandPalette = useCallback(() => {
+    setIsCommandPaletteOpen(false)
+    setCommandPaletteQuery('')
+  }, [])
+
+  const handleNewTerminal = useCallback(() => {
+    setIsCommandPaletteOpen(false)
+    setPromptMode('new-terminal')
+  }, [])
+
+  const handleNewProject = useCallback(() => {
+    setIsCommandPaletteOpen(false)
+    setPromptMode('new-project')
+  }, [])
+
+  const handleSwitchProject = useCallback(() => {
+    setCommandPaletteQuery('project ')
+    setIsCommandPaletteOpen(true)
+  }, [])
+
+  const handleSwitchTerminal = useCallback(() => {
+    setCommandPaletteQuery('terminal ')
+    setIsCommandPaletteOpen(true)
+  }, [])
+
+  const handleRunTerminal = useCallback(async () => {
+    if (activeProject && activeTerminal) {
+      if (activeTerminal.status === 'running') {
+        // Already running, do nothing
+        return
+      }
+      await startTerminal(activeProject.id, activeTerminal.id)
+    }
+  }, [activeProject, activeTerminal, startTerminal])
+
+  const handleRestartTerminal = useCallback(async () => {
+    if (activeProject && activeTerminal) {
+      await restartTerminal(activeProject.id, activeTerminal.id)
+    }
+  }, [activeProject, activeTerminal, restartTerminal])
+
+  const handleKillTerminal = useCallback(async () => {
+    if (activeTerminal && activeProject) {
+      if (activeTerminal.status === 'running') {
+        await stopTerminal(activeTerminal.id)
+      } else if (confirm(`Delete terminal "${activeTerminal.name}"?`)) {
+        await deleteTerminal(activeProject.id, activeTerminal.id)
+      }
+    }
+  }, [activeProject, activeTerminal, stopTerminal, deleteTerminal])
+
+  const handleClearTerminal = useCallback(() => {
+    // This would clear the terminal - handled by xterm
+    // For now, we'll just trigger a visual clear
+    const terminalContainer = document.querySelector('.xterm')
+    if (terminalContainer) {
+      // Send clear command to terminal
+      window.electronAPI?.terminal.write(activeTerminalId || '', '\x1b[2J\x1b[H')
+    }
+  }, [activeTerminalId])
+
+  const handleOpenHelp = useCallback(() => {
+    setIsHelpModalOpen(true)
+  }, [])
+
+  const handleCloseHelp = useCallback(() => {
+    setIsHelpModalOpen(false)
+  }, [])
+
+  // Setup keyboard shortcuts
+  useKeyboardShortcuts({
+    onOpenCommandPalette: handleOpenCommandPalette,
+    onCloseCommandPalette: handleCloseCommandPalette,
+    onNextTerminal: nextTerminal,
+    onPrevTerminal: prevTerminal,
+    onRunTerminal: handleRunTerminal,
+    onRestartTerminal: handleRestartTerminal,
+    onKillTerminal: handleKillTerminal,
+    onNewTerminal: handleNewTerminal,
+    onNewProject: handleNewProject,
+    onSwitchProject: handleSwitchProject,
+    onSwitchTerminal: handleSwitchTerminal,
+    onClearTerminal: handleClearTerminal,
+    onFocusTerminal: handleFocusTerminal,
+    onOpenHelp: handleOpenHelp,
+    isCommandPaletteOpen: isCommandPaletteOpen,
+    enabled: promptMode === 'none' && !isHelpModalOpen // Disable shortcuts when prompt is open
+  })
+
+  // Inline prompt handlers
+  const handlePromptSubmit = useCallback(async (values: Record<string, string>) => {
+    if (promptMode === 'new-terminal') {
+      const projectId = activeProjectId || projects[0]?.id
+      if (projectId) {
+        const cwd = activeProject?.rootDirectory || values.path || ''
+        await createTerminal(
+          projectId,
+          values.name || 'New Terminal',
+          (values.shell as 'cmd' | 'powershell') || settings.defaultShell,
+          cwd,
+          values.command
+        )
+      }
+    } else if (promptMode === 'new-project') {
+      const project = await createProject(values.name || 'New Project', values.path)
+      // Create initial terminal
+      if (project && values.path) {
+        await createTerminal(
+          project.id,
+          'Terminal 1',
+          settings.defaultShell,
+          values.path
+        )
+      }
+    }
+    setPromptMode('none')
+  }, [promptMode, activeProjectId, activeProject, projects, settings.defaultShell, createTerminal, createProject])
+
+  const handlePromptCancel = useCallback(() => {
+    setPromptMode('none')
+  }, [])
+
+  // Prompt field configurations
+  const newTerminalFields: PromptField[] = [
+    { key: 'name', label: 'Name', type: 'text', placeholder: 'Terminal name', required: true },
+    { 
+      key: 'shell', 
+      label: 'Shell', 
+      type: 'select', 
+      defaultValue: settings.defaultShell,
+      options: [
+        { value: 'powershell', label: 'PowerShell' },
+        { value: 'cmd', label: 'Command Prompt' }
+      ]
+    },
+    { key: 'path', label: 'Path', type: 'text', placeholder: activeProject?.rootDirectory || 'Working directory' },
+    { key: 'command', label: 'Command', type: 'text', placeholder: 'Startup command (optional)' }
+  ]
+
+  const newProjectFields: PromptField[] = [
+    { key: 'name', label: 'Name', type: 'text', placeholder: 'Project name', required: true },
+    { key: 'path', label: 'Path', type: 'text', placeholder: 'C:\\path\\to\\project', required: true }
+  ]
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-terminal-bg">
+        <div className="text-terminal-fg">Loading...</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="h-screen w-screen flex flex-col bg-terminal-bg">
+      {/* Main layout */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar */}
+        <Sidebar />
+        
+        {/* Main content area */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Toolbar */}
+          {activeProject && (
+            <Toolbar project={activeProject} />
+          )}
+          
+          {/* Terminal view */}
+          <div className="flex-1 overflow-hidden">
+            {activeTerminal ? (
+              <TerminalView
+                terminal={activeTerminal}
+                projectId={activeProject!.id}
+                onOpenCommandPalette={handleOpenCommandPalette}
+                onNextTerminal={nextTerminal}
+                onPrevTerminal={prevTerminal}
+                onNewTerminal={handleNewTerminal}
+              />
+            ) : (
+              <div className="h-full flex items-center justify-center text-gray-500">
+                <div className="text-center">
+                  <p className="text-lg mb-2">No terminal selected</p>
+                  <p className="text-sm mb-4">Create a project and add terminals to get started</p>
+                  <p className="text-xs text-gray-600">
+                    Press <kbd className="px-1 py-0.5 bg-gray-700 rounded text-gray-300">Ctrl+Space</kbd> to open command palette
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Command Palette */}
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={handleCloseCommandPalette}
+        initialQuery={commandPaletteQuery}
+        onNewTerminal={handleNewTerminal}
+        onNewProject={handleNewProject}
+      />
+
+      {/* Inline Prompts */}
+      <InlinePrompt
+        isOpen={promptMode === 'new-terminal'}
+        title="Create New Terminal"
+        fields={newTerminalFields}
+        onSubmit={handlePromptSubmit}
+        onCancel={handlePromptCancel}
+      />
+
+      <InlinePrompt
+        isOpen={promptMode === 'new-project'}
+        title="Create New Project"
+        fields={newProjectFields}
+        onSubmit={handlePromptSubmit}
+        onCancel={handlePromptCancel}
+      />
+
+      {/* Help Modal */}
+      <HelpModal
+        isOpen={isHelpModalOpen}
+        onClose={handleCloseHelp}
+      />
+
+      {/* Keyboard shortcuts hint */}
+      {!isCommandPaletteOpen && promptMode === 'none' && !isHelpModalOpen && !activeTerminal && (
+        <div className="keyboard-shortcuts-overlay">
+          <div className="mb-1"><kbd>Ctrl</kbd>+<kbd>Space</kbd> Command palette</div>
+          <div className="mb-1"><kbd>Ctrl</kbd>+<kbd>N</kbd> New terminal</div>
+          <div><kbd>?</kbd> Show all shortcuts</div>
+        </div>
+      )}
+
+      {/* Help button - always visible in bottom right */}
+      {!isHelpModalOpen && !isCommandPaletteOpen && promptMode === 'none' && (
+        <button
+          className="help-button"
+          onClick={handleOpenHelp}
+          title="Keyboard shortcuts (?)"
+          style={{
+            position: 'fixed',
+            bottom: '16px',
+            right: '16px',
+            zIndex: 50
+          }}
+        >
+          ?
+        </button>
+      )}
+    </div>
+  )
+}
+
+export default App
