@@ -76,6 +76,8 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
     // Ignore if we're in an input field (unless it's Escape)
     const target = event.target as HTMLElement;
     const isInputField = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+    // Also check if we're inside an xterm terminal (the helper textarea might not be the event target)
+    const isXtermTerminal = target.closest('.xterm') !== null || target.classList.contains('xterm');
     
     // Escape - always handle to close palette
     if (key === 'Escape') {
@@ -86,8 +88,8 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
       return;
     }
 
-    // In input fields, only allow certain shortcuts
-    if (isInputField && !isCommandPaletteOpen) {
+    // In input fields or xterm terminal, only allow certain shortcuts
+    if ((isInputField || isXtermTerminal) && !isCommandPaletteOpen) {
       // Allow Ctrl+Space to open command palette even in inputs
       if (ctrlKey && key === ' ') {
         event.preventDefault();
