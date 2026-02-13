@@ -1,9 +1,10 @@
-import { ipcMain, BrowserWindow } from 'electron'
+import { ipcMain, BrowserWindow, shell } from 'electron'
 import { ConfigStore } from '../store'
 import { PtyManager } from '../pty'
 import { IPC_CHANNELS } from '@shared/ipc'
 import type { PtyConfig, TerminalDataBatch, TerminalExitEvent } from '@shared/ipc'
-import type { Terminal, Project } from '@shared/types'
+import type { Terminal, Project, AppSettings } from '@shared/types'
+import * as git from '../git'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -180,6 +181,10 @@ export function setupIpcHandlers(): void {
     return true
   })
 
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_UPDATE, (_, settings: Partial<AppSettings>): AppSettings => {
+    return store.updateSettings(settings)
+  })
+
   // =====================
   // Terminal Events
   // =====================
@@ -188,5 +193,38 @@ export function setupIpcHandlers(): void {
   ipcMain.on('terminal:exit-handled', (_, terminalId: string, projectId: string, exitCode: number) => {
     const status = exitCode === 0 ? 'stopped' : 'error'
     store.updateTerminal(projectId, terminalId, { status, pid: undefined })
+  })
+
+  // =====================
+  // Git Operations
+  // =====================
+
+  ipcMain.handle(
+    IPC_CHANNELS.GIT_WORKTREE_CREATE,
+    async (_, options: git.WorktreeCreateOptions): Promise<git.WorktreeCreateResult> => {
+      return git.createWorktree(options)
+    }
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.GIT_WORKTREE_LIST,
+    (_, repoPath: string) => {
+      return git.listWorktrees(repoPath)
+    }
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.GIT_BRANCHES_LIST,
+    (_, repoPath: string) => {
+      return git.listBranches(repoPath)
+    }
+  )
+
+  // =====================
+  // Shell Operations
+  // =====================
+
+  ipcMain.handle(IPC_CHANNELS.SHELL_OPEN_FOLDER, (_, folderPath: string): Promise<string> => {
+    return shell.openPath(folderPath)
   })
 }

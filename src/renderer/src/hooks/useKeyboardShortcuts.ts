@@ -1,23 +1,13 @@
 /**
  * Global keyboard shortcuts hook for the keyboard-first UX.
  * 
- * Shortcuts:
- * - Ctrl+Space: Open command palette
- * - Ctrl+Tab: Next terminal
- * - Ctrl+Shift+Tab: Previous terminal
- * - Ctrl+R: Run terminal
- * - Ctrl+Shift+R: Restart terminal
- * - Ctrl+W: Kill terminal
- * - Ctrl+P: Switch project (opens command palette with "project " prefix)
- * - Ctrl+T: Switch terminal (opens command palette with "terminal " prefix)
- * - Ctrl+N: New terminal
- * - Ctrl+Shift+N: New project
- * - F: Focus terminal input
- * - ?: Show help
- * - Escape: Close command palette / cancel
+ * Shortcuts are configurable via the Settings modal.
+ * Reads current shortcut configuration from the store.
  */
 
 import { useEffect, useCallback } from 'react';
+import { useAppStore } from '../store';
+import { DEFAULT_SHORTCUTS, type KeyBinding } from '@shared/types';
 
 export interface KeyboardShortcut {
   key: string;
@@ -39,6 +29,7 @@ interface UseKeyboardShortcutsOptions {
   onKillTerminal: () => void;
   onNewTerminal: () => void;
   onNewProject: () => void;
+  onNewWorktree?: () => void;
   onSwitchProject: () => void;
   onSwitchTerminal: () => void;
   onClearTerminal?: () => void;
@@ -46,6 +37,24 @@ interface UseKeyboardShortcutsOptions {
   onOpenHelp?: () => void;
   isCommandPaletteOpen: boolean;
   enabled?: boolean;
+}
+
+/**
+ * Check if a keyboard event matches a key binding
+ */
+function matchesBinding(event: KeyboardEvent, binding: KeyBinding): boolean {
+  const keyMatch = event.key.toLowerCase() === binding.key.toLowerCase() ||
+    (binding.key === ' ' && event.key === ' ') ||
+    (binding.key === '?' && event.key === '?');
+  
+  if (!keyMatch) return false;
+  
+  const ctrlMatch = !!binding.ctrl === event.ctrlKey;
+  const shiftMatch = !!binding.shift === event.shiftKey;
+  const altMatch = !!binding.alt === event.altKey;
+  const metaMatch = !!binding.meta === event.metaKey;
+  
+  return ctrlMatch && shiftMatch && altMatch && metaMatch;
 }
 
 export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
@@ -59,6 +68,7 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
     onKillTerminal,
     onNewTerminal,
     onNewProject,
+    onNewWorktree,
     onSwitchProject,
     onSwitchTerminal,
     onClearTerminal,
@@ -67,11 +77,13 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
     isCommandPaletteOpen,
     enabled = true
   } = options;
+  
+  // Get shortcuts from store
+  const settings = useAppStore(state => state.settings);
+  const shortcuts = settings.keyboardShortcuts || DEFAULT_SHORTCUTS;
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
     if (!enabled) return;
-
-    const { key, ctrlKey, shiftKey } = event;
 
     // Ignore if we're in an input field (unless it's Escape)
     const target = event.target as HTMLElement;
@@ -80,7 +92,7 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
     const isXtermTerminal = target.closest('.xterm') !== null || target.classList.contains('xterm');
     
     // Escape - always handle to close palette
-    if (key === 'Escape') {
+    if (matchesBinding(event, shortcuts.closeCommandPalette)) {
       if (isCommandPaletteOpen) {
         event.preventDefault();
         onCloseCommandPalette();
@@ -88,25 +100,29 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
       return;
     }
 
-    // In input fields or xterm terminal, only allow certain shortcuts
-    if ((isInputField || isXtermTerminal) && !isCommandPaletteOpen) {
-      // Allow Ctrl+Space to open command palette even in inputs
-      if (ctrlKey && key === ' ') {
+    // Check for openCommandPalette shortcut
+    if (matchesBinding(event, shortcuts.openCommandPalette)) {
+      // In input fields or xterm terminal, only allow Ctrl+Space to open command palette
+      if ((isInputField || isXtermTerminal) && !isCommandPaletteOpen) {
         event.preventDefault();
         onOpenCommandPalette();
         return;
       }
-      return;
+      
+      // If not in input, toggle palette
+      if (!isInputField && !isXtermTerminal) {
+        event.preventDefault();
+        if (isCommandPaletteOpen) {
+          onCloseCommandPalette();
+        } else {
+          onOpenCommandPalette();
+        }
+        return;
+      }
     }
 
-    // Ctrl+Space - Toggle command palette
-    if (ctrlKey && key === ' ') {
-      event.preventDefault();
-      if (isCommandPaletteOpen) {
-        onCloseCommandPalette();
-      } else {
-        onOpenCommandPalette();
-      }
+    // In input fields or xterm terminal, only allow certain shortcuts
+    if ((isInputField || isXtermTerminal) && !isCommandPaletteOpen) {
       return;
     }
 
@@ -114,86 +130,81 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
     if (isCommandPaletteOpen) {
       return;
     }
-
-    // Ctrl+Tab - Next terminal
-    if (ctrlKey && key === 'Tab' && !shiftKey) {
+    
+    // Check all other shortcuts dynamically
+    if (matchesBinding(event, shortcuts.nextTerminal)) {
       event.preventDefault();
       onNextTerminal();
       return;
     }
 
-    // Ctrl+Shift+Tab - Previous terminal
-    if (ctrlKey && key === 'Tab' && shiftKey) {
+    if (matchesBinding(event, shortcuts.prevTerminal)) {
       event.preventDefault();
       onPrevTerminal();
       return;
     }
 
-    // Ctrl+R - Run terminal (only if not in input)
-    if (ctrlKey && key === 'r' && !shiftKey) {
+    if (matchesBinding(event, shortcuts.runTerminal)) {
       event.preventDefault();
       onRunTerminal();
       return;
     }
 
-    // Ctrl+Shift+R - Restart terminal
-    if (ctrlKey && key === 'R' && shiftKey) {
+    if (matchesBinding(event, shortcuts.restartTerminal)) {
       event.preventDefault();
       onRestartTerminal();
       return;
     }
 
-    // Ctrl+W - Kill terminal
-    if (ctrlKey && key === 'w') {
+    if (matchesBinding(event, shortcuts.killTerminal)) {
       event.preventDefault();
       onKillTerminal();
       return;
     }
 
-    // Ctrl+P - Switch project (open palette with focus on projects)
-    if (ctrlKey && key === 'p' && !shiftKey) {
+    if (matchesBinding(event, shortcuts.newWorktree)) {
+      event.preventDefault();
+      onNewWorktree?.();
+      return;
+    }
+
+    if (matchesBinding(event, shortcuts.switchProject)) {
       event.preventDefault();
       onSwitchProject();
       return;
     }
 
-    // Ctrl+T - Switch terminal (open palette with focus on terminals)
-    if (ctrlKey && key === 't' && !shiftKey) {
+    if (matchesBinding(event, shortcuts.switchTerminal)) {
       event.preventDefault();
       onSwitchTerminal();
       return;
     }
 
-    // Ctrl+N - New terminal
-    if (ctrlKey && key === 'n' && !shiftKey) {
+    if (matchesBinding(event, shortcuts.newTerminal)) {
       event.preventDefault();
       onNewTerminal();
       return;
     }
 
-    // Ctrl+Shift+N - New project
-    if (ctrlKey && key === 'N' && shiftKey) {
+    if (matchesBinding(event, shortcuts.newProject)) {
       event.preventDefault();
       onNewProject();
       return;
     }
 
-    // Ctrl+L or Ctrl+K - Clear terminal
-    if (ctrlKey && (key === 'l' || key === 'k') && !shiftKey) {
+    if (matchesBinding(event, shortcuts.clearTerminal)) {
       event.preventDefault();
       onClearTerminal?.();
       return;
     }
 
-    // F - Focus terminal input (quick jump)
-    if (key === 'f' && !ctrlKey && !shiftKey) {
+    if (matchesBinding(event, shortcuts.focusTerminal)) {
       event.preventDefault();
       onFocusTerminal?.();
       return;
     }
 
-    // ? or Shift+/ - Show help
-    if (key === '?' || (key === '/' && shiftKey)) {
+    if (matchesBinding(event, shortcuts.openHelp)) {
       event.preventDefault();
       onOpenHelp?.();
       return;
@@ -202,6 +213,7 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
   }, [
     enabled,
     isCommandPaletteOpen,
+    shortcuts,
     onOpenCommandPalette,
     onCloseCommandPalette,
     onNextTerminal,
@@ -211,6 +223,7 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
     onKillTerminal,
     onNewTerminal,
     onNewProject,
+    onNewWorktree,
     onSwitchProject,
     onSwitchTerminal,
     onClearTerminal,
@@ -225,22 +238,40 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
     }
   }, [handleKeyDown, enabled]);
 
+  // Helper to format a binding for display
+  const formatBinding = (binding: KeyBinding): string[] => {
+    const parts: string[] = [];
+    if (binding.ctrl) parts.push('Ctrl');
+    if (binding.shift) parts.push('Shift');
+    if (binding.alt) parts.push('Alt');
+    if (binding.meta) parts.push('Meta');
+    
+    let key = binding.key;
+    if (key === ' ') key = 'Space';
+    else if (key === 'Escape') key = 'Esc';
+    else if (key.length === 1) key = key.toUpperCase();
+    
+    parts.push(key);
+    return parts;
+  };
+
   return {
-    // Expose shortcuts info for help display
+    // Expose shortcuts info for help display (dynamically from config)
     shortcuts: [
-      { keys: ['Ctrl', 'Space'], description: 'Open command palette' },
-      { keys: ['Ctrl', 'Tab'], description: 'Next terminal' },
-      { keys: ['Ctrl', 'Shift', 'Tab'], description: 'Previous terminal' },
-      { keys: ['Ctrl', 'R'], description: 'Run terminal' },
-      { keys: ['Ctrl', 'Shift', 'R'], description: 'Restart terminal' },
-      { keys: ['Ctrl', 'W'], description: 'Kill terminal' },
-      { keys: ['Ctrl', 'P'], description: 'Switch project' },
-      { keys: ['Ctrl', 'T'], description: 'Switch terminal' },
-      { keys: ['Ctrl', 'N'], description: 'New terminal' },
-      { keys: ['Ctrl', 'Shift', 'N'], description: 'New project' },
-      { keys: ['F'], description: 'Focus terminal' },
-      { keys: ['?'], description: 'Show help' },
-      { keys: ['Esc'], description: 'Close command palette' },
+      { keys: formatBinding(shortcuts.openCommandPalette), description: 'Open command palette' },
+      { keys: formatBinding(shortcuts.nextTerminal), description: 'Next terminal' },
+      { keys: formatBinding(shortcuts.prevTerminal), description: 'Previous terminal' },
+      { keys: formatBinding(shortcuts.runTerminal), description: 'Run terminal' },
+      { keys: formatBinding(shortcuts.restartTerminal), description: 'Restart terminal' },
+      { keys: formatBinding(shortcuts.killTerminal), description: 'Kill terminal' },
+      { keys: formatBinding(shortcuts.newWorktree), description: 'New git worktree' },
+      { keys: formatBinding(shortcuts.switchProject), description: 'Switch project' },
+      { keys: formatBinding(shortcuts.switchTerminal), description: 'Switch terminal' },
+      { keys: formatBinding(shortcuts.newTerminal), description: 'New terminal' },
+      { keys: formatBinding(shortcuts.newProject), description: 'New project' },
+      { keys: formatBinding(shortcuts.focusTerminal), description: 'Focus terminal' },
+      { keys: formatBinding(shortcuts.openHelp), description: 'Show help' },
+      { keys: formatBinding(shortcuts.closeCommandPalette), description: 'Close command palette' },
     ]
   };
 }

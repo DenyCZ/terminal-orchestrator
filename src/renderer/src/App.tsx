@@ -6,9 +6,10 @@ import Toolbar from './components/Toolbar'
 import CommandPalette from './components/CommandPalette'
 import InlinePrompt, { type PromptField } from './components/InlinePrompt'
 import HelpModal from './components/HelpModal'
+import SettingsModal from './components/SettingsModal'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 
-type PromptMode = 'none' | 'new-terminal' | 'new-project'
+type PromptMode = 'none' | 'new-terminal' | 'new-project' | 'new-worktree'
 
 function App() {
   const { 
@@ -36,6 +37,9 @@ function App() {
   
   // Help modal state
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false)
+  
+  // Settings modal state
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
   
   // Track if we've checked for first-time startup
   const hasCheckedStartup = useRef(false)
@@ -125,6 +129,11 @@ function App() {
     setPromptMode('new-project')
   }, [])
 
+  const handleNewWorktree = useCallback(() => {
+    setIsCommandPaletteOpen(false)
+    setPromptMode('new-worktree')
+  }, [])
+
   const handleSwitchProject = useCallback(() => {
     setCommandPaletteQuery('project ')
     setIsCommandPaletteOpen(true)
@@ -179,6 +188,14 @@ function App() {
     setIsHelpModalOpen(false)
   }, [])
 
+  const handleOpenSettings = useCallback(() => {
+    setIsSettingsModalOpen(true)
+  }, [])
+
+  const handleCloseSettings = useCallback(() => {
+    setIsSettingsModalOpen(false)
+  }, [])
+
   // Setup keyboard shortcuts
   useKeyboardShortcuts({
     onOpenCommandPalette: handleOpenCommandPalette,
@@ -190,13 +207,14 @@ function App() {
     onKillTerminal: handleKillTerminal,
     onNewTerminal: handleNewTerminal,
     onNewProject: handleNewProject,
+    onNewWorktree: handleNewWorktree,
     onSwitchProject: handleSwitchProject,
     onSwitchTerminal: handleSwitchTerminal,
     onClearTerminal: handleClearTerminal,
     onFocusTerminal: handleFocusTerminal,
     onOpenHelp: handleOpenHelp,
     isCommandPaletteOpen: isCommandPaletteOpen,
-    enabled: promptMode === 'none' && !isHelpModalOpen // Disable shortcuts when prompt is open
+    enabled: promptMode === 'none' && !isHelpModalOpen && !isSettingsModalOpen // Disable shortcuts when prompt or modal is open
   })
 
   // Inline prompt handlers
@@ -223,6 +241,33 @@ function App() {
           settings.defaultShell,
           values.path
         )
+      }
+    } else if (promptMode === 'new-worktree') {
+      const projectId = activeProjectId || projects[0]?.id
+      const sourcePath = activeProject?.rootDirectory || values.sourcePath || ''
+      
+      if (projectId && sourcePath) {
+        // Create the worktree
+        const result = await window.electronAPI.git.createWorktree({
+          sourcePath,
+          branch: values.branch,
+          createBranch: values.createNewBranch === 'true',
+          basePath: values.basePath || undefined
+        })
+        
+        if (result.success && result.worktreePath) {
+          // Create a terminal in the new worktree
+          await createTerminal(
+            projectId,
+            values.terminalName || `Worktree: ${values.branch}`,
+            settings.defaultShell,
+            result.worktreePath
+          )
+        } else {
+          // Show error
+          console.error('Failed to create worktree:', result.error)
+          alert(`Failed to create worktree: ${result.error}`)
+        }
       }
     }
     setPromptMode('none')
@@ -252,6 +297,23 @@ function App() {
   const newProjectFields: PromptField[] = [
     { key: 'name', label: 'Name', type: 'text', placeholder: 'Project name', required: true },
     { key: 'path', label: 'Path', type: 'text', placeholder: 'C:\\path\\to\\project', required: true }
+  ]
+
+  const newWorktreeFields: PromptField[] = [
+    { key: 'sourcePath', label: 'Source Path', type: 'text', placeholder: activeProject?.rootDirectory || 'Path to git repository', required: true },
+    { key: 'branch', label: 'Branch', type: 'text', placeholder: 'Branch name', required: true },
+    { 
+      key: 'createNewBranch', 
+      label: 'New Branch', 
+      type: 'select', 
+      defaultValue: 'false',
+      options: [
+        { value: 'false', label: 'Use existing branch' },
+        { value: 'true', label: 'Create new branch' }
+      ]
+    },
+    { key: 'basePath', label: 'Base Path', type: 'text', placeholder: 'Optional: custom location for worktree' },
+    { key: 'terminalName', label: 'Terminal Name', type: 'text', placeholder: 'Optional: name for the new terminal' }
   ]
 
   // Loading state
@@ -310,6 +372,8 @@ function App() {
         initialQuery={commandPaletteQuery}
         onNewTerminal={handleNewTerminal}
         onNewProject={handleNewProject}
+        onNewWorktree={handleNewWorktree}
+        onOpenSettings={handleOpenSettings}
       />
 
       {/* Inline Prompts */}
@@ -329,14 +393,29 @@ function App() {
         onCancel={handlePromptCancel}
       />
 
+      <InlinePrompt
+        isOpen={promptMode === 'new-worktree'}
+        title="Create New Git Worktree"
+        fields={newWorktreeFields}
+        onSubmit={handlePromptSubmit}
+        onCancel={handlePromptCancel}
+      />
+
       {/* Help Modal */}
       <HelpModal
         isOpen={isHelpModalOpen}
         onClose={handleCloseHelp}
+        onOpenSettings={handleOpenSettings}
+      />
+      
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={handleCloseSettings}
       />
 
       {/* Keyboard shortcuts hint */}
-      {!isCommandPaletteOpen && promptMode === 'none' && !isHelpModalOpen && !activeTerminal && (
+      {!isCommandPaletteOpen && promptMode === 'none' && !isHelpModalOpen && !isSettingsModalOpen && !activeTerminal && (
         <div className="keyboard-shortcuts-overlay">
           <div className="mb-1"><kbd>Ctrl</kbd>+<kbd>Space</kbd> Command palette</div>
           <div className="mb-1"><kbd>Ctrl</kbd>+<kbd>N</kbd> New terminal</div>
@@ -345,7 +424,7 @@ function App() {
       )}
 
       {/* Help button - always visible in bottom right */}
-      {!isHelpModalOpen && !isCommandPaletteOpen && promptMode === 'none' && (
+      {!isHelpModalOpen && !isCommandPaletteOpen && !isSettingsModalOpen && promptMode === 'none' && (
         <button
           className="help-button"
           onClick={handleOpenHelp}

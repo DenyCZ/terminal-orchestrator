@@ -200,7 +200,8 @@ function ProjectItem({
   onToggle,
   editingTerminalId,
   onTerminalContextMenu,
-  onTerminalRenameComplete
+  onTerminalRenameComplete,
+  filteredTerminals
 }: { 
   project: Project
   isExpanded: boolean
@@ -208,9 +209,11 @@ function ProjectItem({
   editingTerminalId: string | null
   onTerminalContextMenu: (e: React.MouseEvent, terminalId: string, projectId: string) => void
   onTerminalRenameComplete: (projectId: string, terminalId: string, newName: string) => void
+  filteredTerminals?: Terminal[]
 }) {
   const { activeProjectId, activeTerminalId, setActiveProject, setActiveTerminal, createTerminal, deleteProject } = useAppStore()
   const isActive = project.id === activeProjectId
+  const terminals = filteredTerminals ?? project.terminals
   
   return (
     <div className="mb-1">
@@ -224,7 +227,7 @@ function ProjectItem({
         <span className="flex-1 font-medium truncate">{project.name}</span>
         
         {/* Terminal count */}
-        <span className="text-xs text-gray-500">{project.terminals.length}</span>
+        <span className="text-xs text-gray-500">{terminals.length}</span>
         
         {/* Delete button */}
         <button
@@ -244,7 +247,7 @@ function ProjectItem({
       {/* Terminals list */}
       {isExpanded && (
         <div className="ml-4 mt-1">
-          {project.terminals.map(terminal => (
+          {terminals.map(terminal => (
             <TerminalItem
               key={terminal.id}
               terminal={terminal}
@@ -290,6 +293,30 @@ export default function Sidebar() {
     projectId: null
   })
   const [editingTerminalId, setEditingTerminalId] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+
+  // Filter terminals by name
+  const getFilteredTerminals = (project: Project): Terminal[] => {
+    if (!searchQuery.trim()) return project.terminals
+    const query = searchQuery.toLowerCase()
+    return project.terminals.filter(terminal => 
+      terminal.name.toLowerCase().includes(query)
+    )
+  }
+
+  // Auto-expand projects with matching terminals when searching
+  useEffect(() => {
+    if (searchQuery.trim()) {
+      const projectsWithMatches = projects.filter(p => 
+        p.terminals.some(t => t.name.toLowerCase().includes(searchQuery.toLowerCase()))
+      )
+      setExpandedProjects(prev => {
+        const next = new Set(prev)
+        projectsWithMatches.forEach(p => next.add(p.id))
+        return next
+      })
+    }
+  }, [searchQuery, projects])
 
   const toggleProject = (id: string) => {
     setExpandedProjects(prev => {
@@ -384,6 +411,27 @@ export default function Sidebar() {
         <h1 className="font-bold text-lg">Terminal Orchestrator</h1>
       </div>
       
+      {/* Search bar */}
+      <div className="px-3 py-2 border-b border-border-color">
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Filter terminals..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-[#1e1e1e] border border-[#3c3c3c] rounded px-3 py-1.5 text-sm outline-none focus:border-[#4ec9b0] placeholder-gray-500"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white text-xs"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      </div>
+      
       {/* Projects list */}
       <div className="flex-1 overflow-y-auto p-2">
         {projects.map(project => (
@@ -395,6 +443,7 @@ export default function Sidebar() {
             editingTerminalId={editingTerminalId}
             onTerminalContextMenu={handleTerminalContextMenu}
             onTerminalRenameComplete={handleRenameComplete}
+            filteredTerminals={getFilteredTerminals(project)}
           />
         ))}
       </div>

@@ -1,4 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
+import { useAppStore } from '../../store';
+import { DEFAULT_SHORTCUTS, type KeyBinding } from '@shared/types';
 
 interface KeybindGroup {
   title: string;
@@ -8,71 +10,103 @@ interface KeybindGroup {
   }>;
 }
 
-const KEYBIND_GROUPS: KeybindGroup[] = [
-  {
-    title: 'Command Palette',
-    bindings: [
-      { keys: ['Ctrl', 'Space'], description: 'Open command palette' },
-      { keys: ['Esc'], description: 'Close palette/modal' },
-      { keys: ['↑', '↓'], description: 'Navigate suggestions' },
-      { keys: ['Enter'], description: 'Select suggestion' },
-      { keys: ['Tab'], description: 'Autocomplete' },
-    ]
-  },
-  {
-    title: 'Terminal Navigation',
-    bindings: [
-      { keys: ['Ctrl', 'Tab'], description: 'Next terminal' },
-      { keys: ['Ctrl', 'Shift', 'Tab'], description: 'Previous terminal' },
-      { keys: ['Ctrl', 'T'], description: 'Switch terminal (palette)' },
-      { keys: ['Ctrl', 'P'], description: 'Switch project (palette)' },
-      { keys: ['F'], description: 'Focus terminal input' },
-    ]
-  },
-  {
-    title: 'Terminal Actions',
-    bindings: [
-      { keys: ['Ctrl', 'R'], description: 'Run terminal' },
-      { keys: ['Ctrl', 'Shift', 'R'], description: 'Restart terminal' },
-      { keys: ['Ctrl', 'W'], description: 'Stop/Kill terminal' },
-      { keys: ['Ctrl', 'L'], description: 'Clear terminal screen' },
-    ]
-  },
-  {
-    title: 'Create New',
-    bindings: [
-      { keys: ['Ctrl', 'N'], description: 'New terminal' },
-      { keys: ['Ctrl', 'Shift', 'N'], description: 'New project' },
-    ]
-  },
-  {
-    title: 'Command Palette Commands',
-    bindings: [
-      { keys: ['run', 'r'], description: 'Run current terminal' },
-      { keys: ['stop', 's'], description: 'Stop current terminal' },
-      { keys: ['restart'], description: 'Restart terminal' },
-      { keys: ['new'], description: 'Create new terminal' },
-      { keys: ['new project'], description: 'Create new project' },
-      { keys: ['delete', 'rm'], description: 'Delete terminal/project' },
-      { keys: ['start-all'], description: 'Start all terminals' },
-      { keys: ['stop-all'], description: 'Stop all terminals' },
-    ]
-  },
-  {
-    title: 'General',
-    bindings: [
-      { keys: ['?'], description: 'Show this help' },
-    ]
-  },
-];
+// Static command palette commands (these don't change)
+const COMMAND_PALETTE_COMMANDS: KeybindGroup = {
+  title: 'Command Palette Commands',
+  bindings: [
+    { keys: ['run', 'r'], description: 'Run current terminal' },
+    { keys: ['stop', 's'], description: 'Stop current terminal' },
+    { keys: ['restart'], description: 'Restart terminal' },
+    { keys: ['new'], description: 'Create new terminal' },
+    { keys: ['new project'], description: 'Create new project' },
+    { keys: ['delete', 'rm'], description: 'Delete terminal/project' },
+    { keys: ['start-all'], description: 'Start all terminals' },
+    { keys: ['stop-all'], description: 'Stop all terminals' },
+    { keys: ['settings'], description: 'Open settings' },
+  ]
+};
+
+// Helper to format a binding for display
+const formatBinding = (binding: KeyBinding): string[] => {
+  const parts: string[] = [];
+  if (binding.ctrl) parts.push('Ctrl');
+  if (binding.shift) parts.push('Shift');
+  if (binding.alt) parts.push('Alt');
+  if (binding.meta) parts.push('Meta');
+  
+  let key = binding.key;
+  if (key === ' ') key = 'Space';
+  else if (key === 'Escape') key = 'Esc';
+  else if (key === 'ArrowUp') key = '↑';
+  else if (key === 'ArrowDown') key = '↓';
+  else if (key.length === 1) key = key.toUpperCase();
+  
+  parts.push(key);
+  return parts;
+};
 
 interface HelpModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpenSettings?: () => void;
 }
 
-export default function HelpModal({ isOpen, onClose }: HelpModalProps) {
+export default function HelpModal({ isOpen, onClose, onOpenSettings }: HelpModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
+  
+  // Get shortcuts from store
+  const settings = useAppStore(state => state.settings);
+  const shortcuts = settings.keyboardShortcuts || DEFAULT_SHORTCUTS;
+  
+  // Build keybind groups dynamically from configured shortcuts
+  const keybindGroups = useMemo((): KeybindGroup[] => {
+    return [
+      {
+        title: 'Command Palette',
+        bindings: [
+          { keys: formatBinding(shortcuts.openCommandPalette), description: 'Open command palette' },
+          { keys: formatBinding(shortcuts.closeCommandPalette), description: 'Close palette/modal' },
+          { keys: ['↑', '↓'], description: 'Navigate suggestions' },
+          { keys: ['Enter'], description: 'Select suggestion' },
+          { keys: ['Tab'], description: 'Autocomplete' },
+        ]
+      },
+      {
+        title: 'Terminal Navigation',
+        bindings: [
+          { keys: formatBinding(shortcuts.nextTerminal), description: 'Next terminal' },
+          { keys: formatBinding(shortcuts.prevTerminal), description: 'Previous terminal' },
+          { keys: formatBinding(shortcuts.switchTerminal), description: 'Switch terminal (palette)' },
+          { keys: formatBinding(shortcuts.switchProject), description: 'Switch project (palette)' },
+          { keys: formatBinding(shortcuts.focusTerminal), description: 'Focus terminal input' },
+        ]
+      },
+      {
+        title: 'Terminal Actions',
+        bindings: [
+          { keys: formatBinding(shortcuts.runTerminal), description: 'Run terminal' },
+          { keys: formatBinding(shortcuts.restartTerminal), description: 'Restart terminal' },
+          { keys: formatBinding(shortcuts.killTerminal), description: 'Stop/Kill terminal' },
+          { keys: formatBinding(shortcuts.clearTerminal), description: 'Clear terminal screen' },
+        ]
+      },
+      {
+        title: 'Create New',
+        bindings: [
+          { keys: formatBinding(shortcuts.newTerminal), description: 'New terminal' },
+          { keys: formatBinding(shortcuts.newProject), description: 'New project' },
+          { keys: formatBinding(shortcuts.newWorktree), description: 'New git worktree' },
+        ]
+      },
+      COMMAND_PALETTE_COMMANDS,
+      {
+        title: 'General',
+        bindings: [
+          { keys: formatBinding(shortcuts.openHelp), description: 'Show this help' },
+        ]
+      },
+    ];
+  }, [shortcuts]);
 
   // Focus trap and keyboard handling
   useEffect(() => {
@@ -104,17 +138,31 @@ export default function HelpModal({ isOpen, onClose }: HelpModalProps) {
       <div className="help-modal" ref={modalRef} tabIndex={-1}>
         <div className="help-modal-header">
           <h2>Keyboard Shortcuts</h2>
-          <button 
-            className="help-modal-close" 
-            onClick={onClose}
-            aria-label="Close"
-          >
-            ✕
-          </button>
+          <div className="help-modal-header-actions">
+            {onOpenSettings && (
+              <button 
+                className="help-modal-settings-btn" 
+                onClick={() => {
+                  onClose();
+                  onOpenSettings();
+                }}
+                title="Customize shortcuts"
+              >
+                ⚙️ Settings
+              </button>
+            )}
+            <button 
+              className="help-modal-close" 
+              onClick={onClose}
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </div>
         </div>
         
         <div className="help-modal-content">
-          {KEYBIND_GROUPS.map((group) => (
+          {keybindGroups.map((group) => (
             <div key={group.title} className="help-group">
               <h3 className="help-group-title">{group.title}</h3>
               <div className="help-bindings">
@@ -139,12 +187,12 @@ export default function HelpModal({ isOpen, onClose }: HelpModalProps) {
         </div>
 
         <div className="help-modal-footer">
-          <span>Press <kbd>Esc</kbd> or click outside to close</span>
+          <span>Press <kbd>Esc</kbd> or click outside to close • Click <b>⚙️ Settings</b> to customize</span>
         </div>
       </div>
     </div>
   );
 }
 
-// Export keybind groups for use in other components
-export { KEYBIND_GROUPS };
+// Helper function for formatting (exported for potential reuse)
+export { formatBinding };

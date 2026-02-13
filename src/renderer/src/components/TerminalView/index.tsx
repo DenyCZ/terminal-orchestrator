@@ -204,12 +204,19 @@ export default function TerminalView({
         </div>
         
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => window.electronAPI?.shell.openFolder(terminal.workingDirectory)}
+            className="px-2 py-1 text-sm bg-gray-600 hover:bg-gray-500 rounded transition-colors"
+            title="Open in File Explorer"
+          >
+            📁
+          </button>
           {terminal.status === 'running' ? (
             <button
               onClick={() => stopTerminal(terminal.id)}
-              className="px-3 py-1 text-sm bg-red-600 hover:bg-red-700 rounded transition-colors"
+              className="px-3 py-1 text-sm bg-red-600 hover:bg-red-700 rounded transition-colors flex items-center gap-1.5"
             >
-              Stop
+              <span>⏹</span> Stop
             </button>
           ) : (
             <button

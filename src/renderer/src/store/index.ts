@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import type { Project, Terminal, AppConfig } from '@shared/types'
+import type { Project, Terminal, AppConfig, ShortcutConfig, KeyBinding } from '@shared/types'
+import { DEFAULT_SHORTCUTS } from '@shared/types'
 import type { TerminalDataBatch } from '@shared/ipc'
 
 interface AppState {
@@ -43,6 +44,11 @@ interface AppState {
   
   // Settings
   updateSettings: (settings: Partial<AppConfig['settings']>) => void
+  
+  // Keyboard shortcuts
+  updateKeyboardShortcut: (shortcutId: keyof ShortcutConfig, binding: KeyBinding) => void
+  resetKeyboardShortcuts: () => void
+  getKeyboardShortcuts: () => ShortcutConfig
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -295,5 +301,44 @@ export const useAppStore = create<AppState>((set, get) => ({
     set(state => ({
       settings: { ...state.settings, ...settings }
     }))
+  },
+  
+  // Keyboard shortcuts
+  updateKeyboardShortcut: (shortcutId: keyof ShortcutConfig, binding: KeyBinding) => {
+    set(state => {
+      const currentShortcuts = state.settings.keyboardShortcuts || DEFAULT_SHORTCUTS
+      return {
+        settings: {
+          ...state.settings,
+          keyboardShortcuts: {
+            ...currentShortcuts,
+            [shortcutId]: binding
+          } as ShortcutConfig
+        }
+      }
+    })
+    // Persist to main process
+    const newShortcuts = get().settings.keyboardShortcuts || DEFAULT_SHORTCUTS
+    window.electronAPI?.config.updateSettings({
+      keyboardShortcuts: newShortcuts
+    })
+  },
+  
+  resetKeyboardShortcuts: () => {
+    set(state => ({
+      settings: {
+        ...state.settings,
+        keyboardShortcuts: DEFAULT_SHORTCUTS
+      }
+    }))
+    // Persist to main process
+    window.electronAPI?.config.updateSettings({
+      keyboardShortcuts: DEFAULT_SHORTCUTS
+    })
+  },
+  
+  getKeyboardShortcuts: () => {
+    const { settings } = get()
+    return settings.keyboardShortcuts || DEFAULT_SHORTCUTS
   }
 }))

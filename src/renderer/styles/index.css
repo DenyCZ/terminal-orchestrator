@@ -383,6 +383,29 @@ html, body, #root {
   margin: 0;
 }
 
+.help-modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.help-modal-settings-btn {
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  color: #9d9d9d;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.15s;
+}
+
+.help-modal-settings-btn:hover {
+  background: #3c3c3c;
+  color: #d4d4d4;
+  border-color: #4ec9b0;
+}
+
 .help-modal-close {
   width: 28px;
   height: 28px;
@@ -530,5 +553,320 @@ html, body, #root {
 
 .terminal-status-warning {
   animation: terminal-warning-blink 1s ease-in-out infinite;
+}
+
+/* ========================================
+   SETTINGS MODAL
+   ======================================== */
+
+.settings-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+}
+
+.settings-modal {
+  width: 720px;
+  max-width: 90vw;
+  max-height: 85vh;
+  background: #252526;
+  border: 1px solid #3c3c3c;
+  border-radius: 8px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.settings-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: #1e1e1e;
+  border-bottom: 1px solid #3c3c3c;
+}
+
+.settings-modal-header h2 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #d4d4d4;
+  margin: 0;
+}
+
+.settings-modal-close {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: #9d9d9d;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: all 0.15s;
+}
+
+.settings-modal-close:hover:not(:disabled) {
+  background: #3c3c3c;
+  color: #d4d4d4;
+}
+
+.settings-modal-close:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.settings-modal-tabs {
+  display: flex;
+  background: #1e1e1e;
+  border-bottom: 1px solid #3c3c3c;
+  padding: 0 20px;
+}
+
+.settings-tab {
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  color: #9d9d9d;
+  cursor: pointer;
+  font-size: 13px;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+}
+
+.settings-tab:hover {
+  color: #d4d4d4;
+}
+
+.settings-tab.active {
+  color: #4ec9b0;
+  border-bottom-color: #4ec9b0;
+}
+
+.settings-modal-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.settings-modal-footer {
+  padding: 12px 20px;
+  background: #1e1e1e;
+  border-top: 1px solid #3c3c3c;
+  text-align: center;
+  font-size: 12px;
+  color: #6b6b6b;
+}
+
+.settings-modal-footer kbd {
+  display: inline-block;
+  padding: 2px 6px;
+  background: #3c3c3c;
+  border-radius: 3px;
+  font-size: 10px;
+  margin: 0 2px;
+}
+
+/* Shortcuts Tab */
+.settings-shortcuts-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.settings-shortcuts-info {
+  font-size: 13px;
+  color: #9d9d9d;
+  margin: 0;
+}
+
+.settings-reset-btn {
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  color: #9d9d9d;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.settings-reset-btn:hover {
+  background: #3c3c3c;
+  color: #d4d4d4;
+  border-color: #4ec9b0;
+}
+
+.settings-shortcut-group {
+  margin-bottom: 20px;
+}
+
+.settings-shortcut-group-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #4ec9b0;
+  margin: 0 0 12px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #3c3c3c;
+}
+
+.settings-shortcut-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-shortcut-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #1e1e1e;
+  border-radius: 6px;
+  transition: all 0.15s;
+}
+
+.settings-shortcut-item:hover {
+  background: #2a2a2a;
+}
+
+.settings-shortcut-item.editing {
+  background: #37373d;
+  border: 1px solid #4ec9b0;
+}
+
+.settings-shortcut-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-shortcut-name {
+  font-size: 13px;
+  color: #d4d4d4;
+}
+
+.settings-shortcut-desc {
+  font-size: 11px;
+  color: #6b6b6b;
+}
+
+.settings-shortcut-binding {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-shortcut-key {
+  padding: 6px 12px;
+  background: #3c3c3c;
+  border: 1px solid #4a4a4a;
+  border-radius: 4px;
+  color: #d4d4d4;
+  font-size: 12px;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.settings-shortcut-key:hover {
+  background: #4a4a4a;
+  border-color: #4ec9b0;
+}
+
+.settings-shortcut-input {
+  padding: 6px 12px;
+  background: #1e1e1e;
+  border: 2px solid #4ec9b0;
+  border-radius: 4px;
+  color: #4ec9b0;
+  font-size: 12px;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  min-width: 120px;
+  text-align: center;
+  outline: none;
+}
+
+.settings-shortcut-cancel {
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  color: #9d9d9d;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.settings-shortcut-cancel:hover {
+  background: #3c3c3c;
+  color: #d4d4d4;
+}
+
+/* General Tab */
+.settings-general {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.settings-group {
+  margin-bottom: 8px;
+}
+
+.settings-group-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #4ec9b0;
+  margin: 0 0 12px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #3c3c3c;
+}
+
+.settings-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: #1e1e1e;
+  border-radius: 6px;
+}
+
+.settings-item-label {
+  font-size: 13px;
+  color: #d4d4d4;
+}
+
+.settings-select {
+  padding: 6px 12px;
+  background: #3c3c3c;
+  border: 1px solid #4a4a4a;
+  border-radius: 4px;
+  color: #d4d4d4;
+  font-size: 13px;
+  cursor: pointer;
+  outline: none;
+  min-width: 140px;
+}
+
+.settings-select:hover {
+  border-color: #4ec9b0;
+}
+
+.settings-select:focus {
+  border-color: #4ec9b0;
 }
 

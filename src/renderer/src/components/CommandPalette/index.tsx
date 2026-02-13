@@ -10,6 +10,8 @@ interface CommandPaletteProps {
   initialQuery?: string;
   onNewTerminal?: () => void;
   onNewProject?: () => void;
+  onNewWorktree?: () => void;
+  onOpenSettings?: () => void;
 }
 
 interface SuggestionItem {
@@ -26,7 +28,9 @@ export default function CommandPalette({
   onClose, 
   initialQuery = '',
   onNewTerminal,
-  onNewProject 
+  onNewProject,
+  onNewWorktree,
+  onOpenSettings
 }: CommandPaletteProps) {
   const [query, setQuery] = useState(initialQuery);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -113,6 +117,14 @@ export default function CommandPalette({
           subtitle: 'Add a new project to the workspace',
           data: { command: 'new-project', description: 'Create new project' }
         });
+      } else if (lowerQuery.includes('worktree') || lowerQuery === 'new w' || lowerQuery === 'nw' || lowerQuery === 'wt') {
+        items.push({
+          id: 'create-worktree',
+          type: 'command',
+          label: 'Create new git worktree',
+          subtitle: 'Create a new worktree with terminal',
+          data: { command: 'new-worktree', description: 'Create new git worktree' }
+        });
       } else {
         items.push({
           id: 'create-terminal',
@@ -120,6 +132,13 @@ export default function CommandPalette({
           label: 'Create new terminal',
           subtitle: 'Add a new terminal to current project',
           data: { command: 'new-terminal', description: 'Create new terminal' }
+        });
+        items.push({
+          id: 'create-worktree',
+          type: 'command',
+          label: 'Create new git worktree',
+          subtitle: 'Create a new worktree with terminal',
+          data: { command: 'new-worktree', description: 'Create new git worktree' }
         });
       }
     }
@@ -294,6 +313,10 @@ export default function CommandPalette({
             onClose();
             onNewProject?.();
             return; // Don't close palette - let parent handle it
+          case 'new-worktree':
+            onClose();
+            onNewWorktree?.();
+            return; // Don't close palette - let parent handle it
           case 'start-all':
             if (activeProject) {
               for (const t of activeProject.terminals) {
@@ -318,6 +341,10 @@ export default function CommandPalette({
           case 'help':
             // Already showing suggestions
             break;
+          case 'settings':
+            onClose();
+            onOpenSettings?.();
+            return; // Don't close palette - let parent handle it
         }
         break;
       }
@@ -336,7 +363,8 @@ export default function CommandPalette({
     deleteTerminal,
     onClose,
     onNewTerminal,
-    onNewProject
+    onNewProject,
+    onNewWorktree
   ]);
 
   // Handle keyboard navigation

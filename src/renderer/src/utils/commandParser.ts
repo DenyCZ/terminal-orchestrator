@@ -28,11 +28,13 @@ export type CommandType =
   | 'rename'
   | 'new-terminal'
   | 'new-project'
+  | 'new-worktree'
   | 'delete'
   | 'start-all'
   | 'stop-all'
   | 'clear'
-  | 'help';
+  | 'help'
+  | 'settings';
 
 export interface ParsedCommand {
   type: CommandType;
@@ -81,6 +83,10 @@ const COMMAND_ALIASES: Record<string, CommandType> = {
   'nt': 'new-terminal',
   'new-project': 'new-project',
   'np': 'new-project',
+  'new-worktree': 'new-worktree',
+  'nw': 'new-worktree',
+  'worktree': 'new-worktree',
+  'wt': 'new-worktree',
   
   // Bulk actions
   'start-all': 'start-all',
@@ -91,6 +97,10 @@ const COMMAND_ALIASES: Record<string, CommandType> = {
   'cls': 'clear',
   'help': 'help',
   '?': 'help',
+  'settings': 'settings',
+  'config': 'settings',
+  'preferences': 'settings',
+  'prefs': 'settings',
 };
 
 // Keywords that indicate new entity creation
@@ -398,6 +408,7 @@ export function getAvailableCommands(): Array<{ command: string; description: st
     { command: 'restart', description: 'Restart the current terminal', aliases: ['rs'] },
     { command: 'new-terminal', description: 'Create a new terminal', aliases: ['new', 'nt'] },
     { command: 'new-project', description: 'Create a new project', aliases: ['np'] },
+    { command: 'new-worktree', description: 'Create a new git worktree with terminal', aliases: ['nw', 'wt', 'worktree'] },
     { command: 'delete', description: 'Delete the current item', aliases: ['del', 'rm'] },
     { command: 'rename', description: 'Rename current item', aliases: ['rn'] },
     { command: 'clone', description: 'Duplicate current terminal', aliases: ['duplicate'] },
@@ -405,5 +416,6 @@ export function getAvailableCommands(): Array<{ command: string; description: st
     { command: 'stop-all', description: 'Stop all terminals in project', aliases: [] },
     { command: 'clear', description: 'Clear terminal screen', aliases: ['cls'] },
     { command: 'help', description: 'Show this help', aliases: ['?'] },
+    { command: 'settings', description: 'Open settings to customize shortcuts', aliases: ['config', 'prefs', 'preferences'] },
   ];
 }

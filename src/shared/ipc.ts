@@ -27,9 +27,18 @@ export const IPC_CHANNELS = {
   // Config operations
   CONFIG_LOAD: 'config:load',
   CONFIG_SAVE: 'config:save',
+  SETTINGS_UPDATE: 'settings:update',
   
   // Drag & drop
-  FOLDER_DROP: 'folder:drop'
+  FOLDER_DROP: 'folder:drop',
+  
+  // Git operations
+  GIT_WORKTREE_CREATE: 'git:worktree-create',
+  GIT_WORKTREE_LIST: 'git:worktree-list',
+  GIT_BRANCHES_LIST: 'git:branches-list',
+
+  // Shell operations
+  SHELL_OPEN_FOLDER: 'shell:open-folder'
 } as const;
 
 // Terminal spawn configuration
@@ -61,5 +70,30 @@ export interface FolderDropEvent {
   path: string;
   target: DropTarget;
   targetId?: string;
+}
+
+// Git worktree creation options
+export interface WorktreeCreateOptions {
+  sourcePath: string;         // Path to the git repository
+  branch: string;             // Branch name (existing or new)
+  worktreePath?: string;      // Custom path for the worktree (optional)
+  createBranch?: boolean;     // Whether to create a new branch
+  basePath?: string;          // Base path for worktree (if worktreePath not specified)
+}
+
+// Git worktree creation result
+export interface WorktreeCreateResult {
+  success: boolean;
+  worktreePath?: string;
+  branch?: string;
+  error?: string;
+}
+
+// Git branch info
+export interface GitBranch {
+  name: string;
+  isCurrent: boolean;
+  isRemote: boolean;
+  upstream?: string;
 }
 

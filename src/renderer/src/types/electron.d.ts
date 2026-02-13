@@ -1,5 +1,5 @@
-import type { Project, Terminal, AppConfig } from '@shared/types'
-import type { TerminalDataBatch, TerminalExitEvent } from '@shared/ipc'
+import type { Project, Terminal, AppConfig, AppSettings } from '@shared/types'
+import type { TerminalDataBatch, TerminalExitEvent, WorktreeCreateOptions, WorktreeCreateResult, GitBranch } from '@shared/ipc'
 
 export interface ElectronAPI {
   project: {
@@ -35,6 +35,17 @@ export interface ElectronAPI {
   config: {
     load: () => Promise<AppConfig>
     save: (config: AppConfig) => Promise<boolean>
+    updateSettings: (settings: Partial<AppSettings>) => Promise<AppSettings>
+  }
+  
+  git: {
+    createWorktree: (options: WorktreeCreateOptions) => Promise<WorktreeCreateResult>
+    listWorktrees: (repoPath: string) => Promise<{ path: string; branch: string; commit: string }[]>
+    listBranches: (repoPath: string) => Promise<GitBranch[]>
+  }
+  
+  shell: {
+    openFolder: (folderPath: string) => Promise<string>
   }
   
   init: () => void

@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC_CHANNELS } from '@shared/ipc'
-import type { TerminalDataBatch, TerminalExitEvent, PtyConfig } from '@shared/ipc'
-import type { Project, Terminal, AppConfig } from '@shared/types'
+import type { TerminalDataBatch, TerminalExitEvent, PtyConfig, WorktreeCreateOptions, WorktreeCreateResult, GitBranch } from '@shared/ipc'
+import type { Project, Terminal, AppConfig, AppSettings } from '@shared/types'
 
 // Exposed API to renderer
 const electronAPI = {
@@ -81,7 +81,25 @@ const electronAPI = {
   config: {
     load: (): Promise<AppConfig> => ipcRenderer.invoke(IPC_CHANNELS.CONFIG_LOAD),
     save: (config: AppConfig): Promise<boolean> =>
-      ipcRenderer.invoke(IPC_CHANNELS.CONFIG_SAVE, config)
+      ipcRenderer.invoke(IPC_CHANNELS.CONFIG_SAVE, config),
+    updateSettings: (settings: Partial<AppSettings>): Promise<AppSettings> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_UPDATE, settings)
+  },
+
+  // Git operations
+  git: {
+    createWorktree: (options: WorktreeCreateOptions): Promise<WorktreeCreateResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_WORKTREE_CREATE, options),
+    listWorktrees: (repoPath: string): Promise<{ path: string; branch: string; commit: string }[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_WORKTREE_LIST, repoPath),
+    listBranches: (repoPath: string): Promise<GitBranch[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_BRANCHES_LIST, repoPath)
+  },
+
+  // Shell operations
+  shell: {
+    openFolder: (folderPath: string): Promise<string> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SHELL_OPEN_FOLDER, folderPath)
   },
 
   // Initialize main window reference
