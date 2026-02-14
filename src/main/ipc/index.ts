@@ -3,8 +3,9 @@ import { ConfigStore } from '../store'
 import { PtyManager } from '../pty'
 import { IPC_CHANNELS } from '@shared/ipc'
 import type { PtyConfig, TerminalDataBatch, TerminalExitEvent } from '@shared/ipc'
-import type { Terminal, Project, ProjectGroup, AppSettings } from '@shared/types'
+import type { Terminal, Project, ProjectGroup, WebUISettings, AppSettings } from '@shared/types'
 import * as git from '../git'
+import { WebUIManager } from '../web-ui-manager'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -260,5 +261,45 @@ export function setupIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.SHELL_OPEN_FOLDER, (_, folderPath: string): Promise<string> => {
     return shell.openPath(folderPath)
+  })
+
+  // =====================
+  // Web UI Operations
+  // =====================
+
+  const webUIManager = WebUIManager.getInstance()
+
+  ipcMain.handle(IPC_CHANNELS.WEBUI_START, async (): Promise<{ success: boolean; error?: string }> => {
+    const settings = store.getSettings().webUI
+    if (settings) {
+      try {
+        await webUIManager.start(settings)
+        return { success: true }
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+      }
+    }
+    return { success: false, error: 'Web UI settings not found' }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.WEBUI_STOP, async (): Promise<{ success: boolean }> => {
+    await webUIManager.stop()
+    return { success: true }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.WEBUI_STATUS, (): WebUIStatus => {
+    const settings = store.getSettings().webUI as WebUISettings | undefined
+    return {
+      running: webUIManager.isRunning(),
+      port: settings?.port || 3000,
+      pin: settings?.pin || '',
+      addresses: [],
+      url: settings?.enabled ? `http://localhost:${settings?.port || 3000}` : undefined
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.WEBUI_REGENERATE_PIN, (): { pin: string } => {
+    const newPin = webUIManager.regeneratePIN()
+    return { pin: newPin }
   })
 }

@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
-import { useAppStore } from '../../store'
-import { SHORTCUT_DEFINITIONS, DEFAULT_SHORTCUTS, type ShortcutId, type KeyBinding } from '@shared/types'
-import { formatBindingString } from '../../utils/keybinds'
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { useAppStore } from '../../store';
+import { SHORTCUT_DEFINITIONS, DEFAULT_SHORTCUTS, DEFAULT_SETTINGS, type KeyBinding, type ShortcutId } from '@shared/types';
+import type { WebUIStatus } from '@shared/ipc';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-type SettingsTab = 'shortcuts' | 'general';
+type SettingsTab = 'shortcuts' | 'general' | 'webui';
 
 /**
  * SettingsModal - Modal for configuring application settings including keyboard shortcuts.
@@ -18,15 +18,68 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [editingShortcut, setEditingShortcut] = useState<ShortcutId | null>(null);
   const [pendingBinding, setPendingBinding] = useState<KeyBinding | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
+  const [webUIStatus, setWebUIStatus] = useState<WebUIStatus | null>(null);
   
   const { 
     settings, 
     updateKeyboardShortcut, 
-    resetKeyboardShortcuts 
+    resetKeyboardShortcuts,
+    updateSettings
   } = useAppStore();
   
   // Get current shortcuts from settings or defaults
   const shortcuts = settings.keyboardShortcuts || DEFAULT_SHORTCUTS;
+  
+  // Load Web UI status
+  useEffect(() => {
+    if (isOpen && activeTab === 'webui') {
+      loadWebUIStatus();
+    }
+  }, [isOpen, activeTab]);
+  
+  const loadWebUIStatus = async () => {
+    try {
+      const status = await window.electronAPI.webui.getStatus();
+      setWebUIStatus(status);
+    } catch (error) {
+      console.error('Failed to load Web UI status:', error);
+    }
+  };
+  
+  const handleWebUIToggle = async (enabled: boolean) => {
+    updateSettings({ webUI: { ...DEFAULT_SETTINGS.webUI!, ...settings.webUI, enabled } });
+    if (enabled) {
+      await window.electronAPI.webui.start();
+    } else {
+      await window.electronAPI.webui.stop();
+    }
+    loadWebUIStatus();
+  };
+  
+  const handlePortChange = (port: number) => {
+    updateSettings({ webUI: { ...DEFAULT_SETTINGS.webUI!, ...settings.webUI, port } });
+  };
+  
+  const handleAllowRemoteChange = async (allowRemote: boolean) => {
+    updateSettings({ webUI: { ...DEFAULT_SETTINGS.webUI!, ...settings.webUI, allowRemote } });
+    if (webUIStatus?.running) {
+      await window.electronAPI.webui.stop();
+      await window.electronAPI.webui.start();
+      loadWebUIStatus();
+    }
+  };
+  
+  const handleRegeneratePIN = async () => {
+    const result = await window.electronAPI.webui.regeneratePin();
+    loadWebUIStatus();
+    return result.pin;
+  };
+  
+  const handleCopyURL = () => {
+    if (webUIStatus?.url) {
+      navigator.clipboard.writeText(webUIStatus.url);
+    }
+  };
   
   // Focus trap and keyboard handling
   useEffect(() => {
@@ -108,8 +161,35 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     if (confirm('Reset all keyboard shortcuts to their default values?')) {
       resetKeyboardShortcuts();
     }
-  }
-
+  };
+  
+  // Format key binding for display
+  const formatBinding = (binding: KeyBinding): string => {
+    const parts: string[] = [];
+    if (binding.ctrl) parts.push('Ctrl');
+    if (binding.shift) parts.push('Shift');
+    if (binding.alt) parts.push('Alt');
+    if (binding.meta) parts.push('Meta');
+    
+    // Format the key
+    let key = binding.key;
+    if (key === ' ') key = 'Space';
+    else if (key === 'ArrowUp') key = '↑';
+    else if (key === 'ArrowDown') key = '↓';
+    else if (key === 'ArrowLeft') key = '←';
+    else if (key === 'ArrowRight') key = '→';
+    else if (key === 'Escape') key = 'Esc';
+    else if (key === 'Tab') key = 'Tab';
+    else if (key === 'Enter') key = 'Enter';
+    else if (key === 'Backspace') key = '⌫';
+    else if (key === 'Delete') key = 'Del';
+    else if (key.length === 1) key = key.toUpperCase();
+    
+    parts.push(key);
+    return parts.join(' + ');
+  };
+  
+  // Group shortcuts by category
   const groupedShortcuts = SHORTCUT_DEFINITIONS.reduce((acc, def) => {
     const group = def.group;
     if (!acc[group]) acc[group] = [];
@@ -146,6 +226,12 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             onClick={() => setActiveTab('general')}
           >
             General
+          </button>
+          <button
+            className={`settings-tab ${activeTab === 'webui' ? 'active' : ''}`}
+            onClick={() => setActiveTab('webui')}
+          >
+            Mobile Web UI
           </button>
         </div>
         
@@ -190,7 +276,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                   tabIndex={0}
                                   autoFocus
                                 >
-                                  {pendingBinding ? formatBindingString(pendingBinding) : 'Press new key...'}
+                                  {pendingBinding ? formatBinding(pendingBinding) : 'Press new key...'}
                                 </div>
                               ) : (
                                 <button
@@ -198,7 +284,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                   onClick={() => startEditingShortcut(def.id as ShortcutId)}
                                   title="Click to change"
                                 >
-                                  {formatBindingString(currentBinding)}
+                                  {formatBinding(currentBinding)}
                                 </button>
                               )}
                               {isEditing && (
@@ -251,6 +337,116 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   </select>
                 </div>
               </div>
+            </div>
+          )}
+          
+          {activeTab === 'webui' && (
+            <div className="settings-webui">
+              <div className="settings-group">
+                <h3 className="settings-group-title">Mobile Access</h3>
+                <p className="settings-group-description">
+                  Enable mobile browser access to this application from your local network.
+                  The feature is only active when this desktop app is running.
+                </p>
+                
+                <div className="settings-item">
+                  <span className="settings-item-label">Enable Mobile Web UI</span>
+                  <label className="settings-toggle">
+                    <input
+                      type="checkbox"
+                      checked={settings.webUI?.enabled || false}
+                      onChange={(e) => handleWebUIToggle(e.target.checked)}
+                    />
+                    <span className="settings-toggle-slider"></span>
+                  </label>
+                </div>
+              </div>
+              
+              {settings.webUI?.enabled && (
+                <>
+                  <div className="settings-group">
+                    <div className="settings-item">
+                      <span className="settings-item-label">Port</span>
+                      <input
+                        type="number"
+                        className="settings-input"
+                        value={settings.webUI?.port || 3000}
+                        onChange={(e) => handlePortChange(parseInt(e.target.value) || 3000)}
+                        min={1024}
+                        max={65535}
+                      />
+                    </div>
+                    
+                    <div className="settings-item">
+                      <span className="settings-item-label">Access PIN</span>
+                      <div className="settings-pin-display">
+                        <code>{webUIStatus?.pin || settings.webUI?.pin || 'Not set'}</code>
+                        <button 
+                          className="settings-btn-secondary"
+                          onClick={handleRegeneratePIN}
+                        >
+                          Regenerate
+                        </button>
+                      </div>
+                      <span className="settings-item-hint">
+                        Enter this PIN on your mobile device to connect
+                      </span>
+                    </div>
+                    
+                    <div className="settings-item">
+                      <span className="settings-item-label">Allow Remote Connections</span>
+                      <label className="settings-toggle">
+                        <input
+                          type="checkbox"
+                          checked={settings.webUI?.allowRemote || false}
+                          onChange={(e) => handleAllowRemoteChange(e.target.checked)}
+                        />
+                        <span className="settings-toggle-slider"></span>
+                      </label>
+                      <span className="settings-item-hint">
+                        Allow connections from any network (not just localhost)
+                      </span>
+                    </div>
+                  </div>
+                  
+                  {webUIStatus?.running && (
+                    <div className="settings-group settings-connection-info">
+                      <h3 className="settings-group-title">Connection Info</h3>
+                      
+                      <div className="settings-item">
+                        <span className="settings-item-label">Mobile URL</span>
+                        <div className="settings-url-display">
+                          <code>{webUIStatus.url}</code>
+                          <button 
+                            className="settings-btn-secondary"
+                            onClick={handleCopyURL}
+                          >
+                            Copy
+                          </button>
+                        </div>
+                      </div>
+                      
+                      {settings.webUI?.showQRCode && webUIStatus.qrCode && (
+                        <div className="settings-item">
+                          <span className="settings-item-label">QR Code</span>
+                          <img 
+                            src={webUIStatus.qrCode} 
+                            alt="QR Code for mobile connection" 
+                            className="settings-qr-code"
+                          />
+                        </div>
+                      )}
+                      
+                      <div className="settings-item">
+                        <span className="settings-item-label">Status</span>
+                        <span className={`settings-status-badge ${webUIStatus.running ? 'running' : 'stopped'}`}>
+                          {webUIStatus.running ? 'Running' : 'Stopped'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
         </div>

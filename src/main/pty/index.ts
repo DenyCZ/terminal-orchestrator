@@ -1,8 +1,14 @@
 import { BrowserWindow } from 'electron'
 import { spawn, ChildProcess } from 'child_process'
 import { v4 as uuid } from 'uuid'
-import type { ShellType } from '@shared/types'
+import type { ShellType, TerminalStatus } from '@shared/types'
 import type { PtyConfig } from '@shared/ipc'
+
+// Interface for WebSocket broadcaster (to avoid circular dependency)
+export interface ITerminalDataBroadcaster {
+  broadcastToTerminal(terminalId: string, data: string): void
+  broadcastStatus(terminalId: string, status: TerminalStatus): void
+}
 
 // Type definitions for PTY interface
 interface IPty {
@@ -176,10 +182,15 @@ export class PtyManager {
   private batcher: DataBatcher
   private window: BrowserWindow | null = null
   private ptyAvailable: boolean | null = null
+  private wsServer: ITerminalDataBroadcaster | null = null
 
   private constructor() {
     this.batcher = new DataBatcher()
     this.checkPtyAvailability()
+  }
+  
+  setWebSocketServer(wsServer: ITerminalDataBroadcaster | null): void {
+    this.wsServer = wsServer
   }
 
   private async checkPtyAvailability(): Promise<void> {
@@ -246,12 +257,18 @@ export class PtyManager {
     // Setup data handling with batching
     ptyProcess.onData((data) => {
       this.batcher.queueData(config.terminalId, data)
+      // Also broadcast to WebSocket clients
+      this.wsServer?.broadcastToTerminal(config.terminalId, data)
     })
 
     // Handle exit
     ptyProcess.onExit(({ exitCode }) => {
       this.batcher.clear(config.terminalId)
       this.sessions.delete(config.terminalId)
+      
+      // Broadcast status to WebSocket clients
+      const status: TerminalStatus = exitCode === 0 ? 'stopped' : 'error'
+      this.wsServer?.broadcastStatus(config.terminalId, status)
       
       if (this.window && !this.window.isDestroyed()) {
         this.window.webContents.send('terminal:exit', {

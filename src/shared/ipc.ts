@@ -46,7 +46,13 @@ export const IPC_CHANNELS = {
   GIT_BRANCHES_LIST: 'git:branches-list',
 
   // Shell operations
-  SHELL_OPEN_FOLDER: 'shell:open-folder'
+  SHELL_OPEN_FOLDER: 'shell:open-folder',
+  
+  // Web UI operations
+  WEBUI_START: 'webui:start',
+  WEBUI_STOP: 'webui:stop',
+  WEBUI_STATUS: 'webui:status',
+  WEBUI_REGENERATE_PIN: 'webui:regenerate-pin'
 } as const;
 
 // Terminal spawn configuration
@@ -103,5 +109,15 @@ export interface GitBranch {
   isCurrent: boolean;
   isRemote: boolean;
   upstream?: string;
+}
+
+// Web UI status
+export interface WebUIStatus {
+  running: boolean;
+  port: number;
+  pin: string;
+  url?: string;
+  addresses: string[];
+  qrCode?: string;
 }
 

@@ -4,6 +4,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { setupIpcHandlers } from './ipc'
 import { ConfigStore } from './store'
 import { PtyManager } from './pty'
+import { WebUIManager } from './web-ui-manager'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -60,6 +61,9 @@ app.whenReady().then(() => {
   // Setup IPC handlers
   setupIpcHandlers()
 
+  // Initialize Web UI manager
+  WebUIManager.getInstance().initialize().catch(console.error)
+
   createWindow()
 
   app.on('activate', () => {
@@ -71,6 +75,7 @@ app.whenReady().then(() => {
 // Close all PTY processes on quit
 app.on('before-quit', () => {
   PtyManager.getInstance().killAll()
+  WebUIManager.getInstance().stop().catch(console.error)
 })
 
 // Quit when all windows are closed, except on macOS

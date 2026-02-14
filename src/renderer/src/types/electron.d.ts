@@ -1,21 +1,12 @@
-import type { Project, ProjectGroup, Terminal, AppConfig, AppSettings } from '@shared/types'
-import type { TerminalDataBatch, TerminalExitEvent, WorktreeCreateOptions, WorktreeCreateResult, GitBranch } from '@shared/ipc'
+import type { Project, Terminal, AppConfig, AppSettings } from '@shared/types'
+import type { TerminalDataBatch, TerminalExitEvent, WorktreeCreateOptions, WorktreeCreateResult, GitBranch, WebUIStatus } from '@shared/ipc'
 
 export interface ElectronAPI {
-  group: {
-    list: () => Promise<ProjectGroup[]>
-    create: (name: string, color?: string) => Promise<ProjectGroup>
-    update: (id: string, updates: Partial<ProjectGroup>) => Promise<ProjectGroup | undefined>
-    delete: (id: string) => Promise<boolean>
-    reorder: (groupIds: string[]) => Promise<boolean>
-  }
-
   project: {
     list: () => Promise<Project[]>
     create: (name: string, rootDirectory?: string) => Promise<Project>
     update: (id: string, updates: Partial<Project>) => Promise<Project | undefined>
     delete: (id: string) => Promise<boolean>
-    reorder: (projectIds: string[], groupId?: string) => Promise<boolean>
   }
   
   terminal: {
@@ -55,6 +46,13 @@ export interface ElectronAPI {
   
   shell: {
     openFolder: (folderPath: string) => Promise<string>
+  }
+  
+  webui: {
+    start: () => Promise<{ success: boolean; error?: string }>
+    stop: () => Promise<{ success: boolean }>
+    getStatus: () => Promise<WebUIStatus>
+    regeneratePin: () => Promise<{ pin: string }>
   }
   
   init: () => void

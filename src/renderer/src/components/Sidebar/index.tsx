@@ -1,7 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAppStore } from '../../store'
-import type { Project, ProjectGroup, Terminal } from '@shared/types'
+import type { Project, Terminal } from '@shared/types'
 
+interface SidebarProps {
+  onOpenSettings?: () => void
+}
+
+// Context menu position type
 interface ContextMenuState {
   visible: boolean
   x: number
@@ -10,6 +15,7 @@ interface ContextMenuState {
   projectId: string | null
 }
 
+// Status indicator component
 function StatusIndicator({ status }: { status: Terminal['status'] }) {
   const statusConfig = {
     running: { color: 'bg-green-500', blink: false, label: 'Running' },
@@ -29,6 +35,7 @@ function StatusIndicator({ status }: { status: Terminal['status'] }) {
   )
 }
 
+// Context menu component
 function TerminalContextMenu({
   visible,
   x,
@@ -89,6 +96,7 @@ function TerminalContextMenu({
   )
 }
 
+// Terminal item component
 function TerminalItem({ 
   terminal, 
   projectId, 
@@ -189,6 +197,7 @@ function TerminalItem({
   )
 }
 
+// Project item component
 function ProjectItem({ 
   project, 
   isExpanded, 
@@ -196,15 +205,7 @@ function ProjectItem({
   editingTerminalId,
   onTerminalContextMenu,
   onTerminalRenameComplete,
-  filteredTerminals,
-  isInGroup = false,
-  onDragStart,
-  onDragOver,
-  onDragLeave,
-  onDrop,
-  onDragEnd,
-  isDragging,
-  isDragOver: isItemDragOver
+  filteredTerminals
 }: { 
   project: Project
   isExpanded: boolean
@@ -213,56 +214,13 @@ function ProjectItem({
   onTerminalContextMenu: (e: React.MouseEvent, terminalId: string, projectId: string) => void
   onTerminalRenameComplete: (projectId: string, terminalId: string, newName: string) => void
   filteredTerminals?: Terminal[]
-  isInGroup?: boolean
-  onDragStart?: (e: React.DragEvent, projectId: string) => void
-  onDragOver?: (e: React.DragEvent, projectId: string, groupId?: string) => void
-  onDragLeave?: () => void
-  onDrop?: (e: React.DragEvent, projectId: string, groupId?: string) => void
-  onDragEnd?: () => void
-  isDragging?: boolean
-  isDragOver?: boolean
 }) {
-  const { activeProjectId, activeTerminalId, setActiveProject, setActiveTerminal, createTerminal, deleteProject, groups, updateProject } = useAppStore()
+  const { activeProjectId, activeTerminalId, setActiveProject, setActiveTerminal, createTerminal, deleteProject } = useAppStore()
   const isActive = project.id === activeProjectId
   const terminals = filteredTerminals ?? project.terminals
-  const [showGroupMenu, setShowGroupMenu] = useState(false)
-  
-  const handleDragStart = (e: React.DragEvent) => {
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', `project:${project.id}`)
-    onDragStart?.(e, project.id)
-  }
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-    onDragOver?.(e, project.id, project.groupId)
-  }
-
-  const handleDragLeave = () => {
-    onDragLeave?.()
-  }
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    onDrop?.(e, project.id, project.groupId)
-  }
-
-  const handleDragEnd = () => {
-    onDragEnd?.()
-  }
   
   return (
-    <div 
-      className={`mb-1 transition-all ${isDragging ? 'opacity-30 scale-95' : ''} ${isItemDragOver ? 'border-t-2 border-[#4ec9b0] pt-1' : ''}`}
-      draggable
-      onDragStart={handleDragStart}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-      onDragEnd={handleDragEnd}
-    >
+    <div className="mb-1">
       {/* Project header */}
       <div
         className={`flex items-center gap-2 px-3 py-2 cursor-pointer rounded group
@@ -270,56 +228,10 @@ function ProjectItem({
         onClick={() => { setActiveProject(project.id); onToggle() }}
       >
         <span className={`transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
-        <span className="flex-1 font-medium truncate cursor-grab active:cursor-grabbing select-none">{project.name}</span>
+        <span className="flex-1 font-medium truncate">{project.name}</span>
         
         {/* Terminal count */}
         <span className="text-xs text-gray-500">{terminals.length}</span>
-        
-        {/* Group selector - only show when not inside a group */}
-        {!isInGroup && (
-          <div className="relative">
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                setShowGroupMenu(!showGroupMenu)
-              }}
-              className="opacity-0 group-hover:opacity-100 p-1 hover:bg-[#37373d] rounded text-xs"
-              title="Assign to group"
-            >
-              📁
-            </button>
-            
-            {showGroupMenu && (
-              <div 
-                className="absolute right-0 top-full mt-1 bg-[#252526] border border-[#3c3c3c] rounded shadow-lg py-1 z-50 min-w-[120px]"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <button
-                  onClick={() => {
-                    updateProject(project.id, { groupId: undefined })
-                    setShowGroupMenu(false)
-                  }}
-                  className={`w-full px-3 py-1.5 text-left text-sm hover:bg-[#37373d] ${!project.groupId ? 'text-[#4ec9b0]' : ''}`}
-                >
-                  No Group
-                </button>
-                {groups.map(g => (
-                  <button
-                    key={g.id}
-                    onClick={() => {
-                      updateProject(project.id, { groupId: g.id })
-                      setShowGroupMenu(false)
-                    }}
-                    className={`w-full px-3 py-1.5 text-left text-sm hover:bg-[#37373d] flex items-center gap-2 ${project.groupId === g.id ? 'text-[#4ec9b0]' : ''}`}
-                  >
-                    {g.color && <span className="w-2 h-2 rounded-full" style={{ backgroundColor: g.color }} />}
-                    {g.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
         
         {/* Delete button */}
         <button
@@ -373,192 +285,8 @@ function ProjectItem({
   )
 }
 
-function GroupItem({
-  group,
-  projects,
-  isExpanded,
-  onToggle,
-  editingTerminalId,
-  onTerminalContextMenu,
-  onTerminalRenameComplete,
-  getFilteredTerminals,
-  onDragOver,
-  onDrop,
-  isDragOver: isItemDragOver,
-  onProjectDragStart,
-  onProjectDragOver,
-  onProjectDragLeave,
-  onProjectDrop,
-  onProjectDragEnd,
-  draggingProjectId
-}: {
-  group: ProjectGroup
-  projects: Project[]
-  isExpanded: boolean
-  onToggle: () => void
-  editingTerminalId: string | null
-  onTerminalContextMenu: (e: React.MouseEvent, terminalId: string, projectId: string) => void
-  onTerminalRenameComplete: (projectId: string, terminalId: string, newName: string) => void
-  getFilteredTerminals: (project: Project) => Terminal[]
-  onDragOver?: (e: React.DragEvent, groupId: string) => void
-  onDrop?: (e: React.DragEvent, groupId: string) => void
-  isDragOver?: boolean
-  onProjectDragStart?: (e: React.DragEvent, projectId: string) => void
-  onProjectDragOver?: (e: React.DragEvent, projectId: string, groupId?: string) => void
-  onProjectDragLeave?: () => void
-  onProjectDrop?: (e: React.DragEvent, projectId: string, groupId?: string) => void
-  onProjectDragEnd?: () => void
-  draggingProjectId?: string | null
-}) {
-  const { deleteGroup, updateGroup } = useAppStore()
-  const [isEditing, setIsEditing] = useState(false)
-  const [editName, setEditName] = useState(group.name)
-  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set())
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  const toggleProject = (projectId: string) => {
-    setExpandedProjects(prev => {
-      const next = new Set(prev)
-      if (next.has(projectId)) {
-        next.delete(projectId)
-      } else {
-        next.add(projectId)
-      }
-      return next
-    })
-  }
-
-  useEffect(() => {
-    if (isEditing && inputRef.current) {
-      const timer = setTimeout(() => {
-        inputRef.current?.focus()
-        inputRef.current?.select()
-      }, 0)
-      return () => clearTimeout(timer)
-    }
-  }, [isEditing])
-
-  const handleRenameComplete = () => {
-    setIsEditing(false)
-    if (editName.trim() && editName !== group.name) {
-      updateGroup(group.id, { name: editName.trim() })
-    } else {
-      setEditName(group.name)
-    }
-  }
-
-  const handleDragOver = (e: React.DragEvent) => {
-    // Only handle if dragging a project, move project to this group
-    if (draggingProjectId) {
-      e.preventDefault()
-      e.dataTransfer.dropEffect = 'move'
-      onDragOver?.(e, group.id)
-    }
-  }
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    onDrop?.(e, group.id)
-  }
-
-  return (
-    <div 
-      className={`mb-1 transition-all ${isItemDragOver ? 'bg-[#1a3a5a] rounded' : ''}`}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
-    >
-      {/* Group header */}
-      <div
-        className={`flex items-center gap-2 px-3 py-2 cursor-pointer rounded group
-          hover:bg-sidebar-hover`}
-        onClick={() => onToggle()}
-      >
-        <span className={`transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
-        {group.color && (
-          <span className="w-3 h-3 rounded-full" style={{ backgroundColor: group.color }} />
-        )}
-        {isEditing ? (
-          <input
-            ref={inputRef}
-            type="text"
-            value={editName}
-            onChange={(e) => setEditName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleRenameComplete()
-              if (e.key === 'Escape') {
-                setEditName(group.name)
-                setIsEditing(false)
-              }
-            }}
-            onBlur={handleRenameComplete}
-            className="flex-1 bg-[#1e1e1e] border border-[#4ec9b0] rounded px-2 py-0.5 text-sm outline-none"
-            onClick={(e) => e.stopPropagation()}
-          />
-        ) : (
-          <span className="flex-1 font-semibold truncate select-none">{group.name}</span>
-        )}
-        
-        {/* Project count */}
-        <span className="text-xs text-gray-500">{projects.length}</span>
-        
-        {/* Rename button */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            setIsEditing(true)
-          }}
-          className="opacity-0 group-hover:opacity-100 p-1 hover:bg-[#37373d] rounded text-xs"
-          title="Rename group"
-        >
-          ✏️
-        </button>
-        
-        {/* Delete button */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            if (confirm(`Delete group "${group.name}"? Projects will be ungrouped.`)) {
-              deleteGroup(group.id)
-            }
-          }}
-          className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-600 rounded text-xs"
-          title="Delete group"
-        >
-          ✕
-        </button>
-      </div>
-      
-      {/* Projects list */}
-      {isExpanded && (
-        <div className="ml-2 mt-1">
-          {projects.map(project => (
-            <ProjectItem
-              key={project.id}
-              project={project}
-              isExpanded={expandedProjects.has(project.id)}
-              onToggle={() => toggleProject(project.id)}
-              editingTerminalId={editingTerminalId}
-              onTerminalContextMenu={onTerminalContextMenu}
-              onTerminalRenameComplete={onTerminalRenameComplete}
-              filteredTerminals={getFilteredTerminals(project)}
-              isInGroup={true}
-              onDragStart={onProjectDragStart}
-              onDragOver={onProjectDragOver}
-              onDragLeave={onProjectDragLeave}
-              onDrop={onProjectDrop}
-              onDragEnd={onProjectDragEnd}
-              isDragging={draggingProjectId === project.id}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-export default function Sidebar() {
-  const { groups, projects, createProject, createTerminal, updateTerminal, deleteTerminal, createGroup, reorderProjects } = useAppStore()
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+export default function Sidebar({ onOpenSettings }: SidebarProps) {
+  const { projects, createProject, createTerminal, updateTerminal, deleteTerminal } = useAppStore()
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set())
   const [dragOver, setDragOver] = useState(false)
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
@@ -570,10 +298,8 @@ export default function Sidebar() {
   })
   const [editingTerminalId, setEditingTerminalId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [draggingProjectId, setDraggingProjectId] = useState<string | null>(null)
-  const [dragOverProjectId, setDragOverProjectId] = useState<string | null>(null)
-  const [dragOverGroupId, setDragOverGroupId] = useState<string | null>(null)
 
+  // Filter terminals by name
   const getFilteredTerminals = (project: Project): Terminal[] => {
     if (!searchQuery.trim()) return project.terminals
     const query = searchQuery.toLowerCase()
@@ -582,128 +308,7 @@ export default function Sidebar() {
     )
   }
 
-  const getProjectsByGroup = (groupId: string): Project[] => {
-    return projects
-      .filter(p => p.groupId === groupId)
-      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-  }
-
-  const ungroupedProjects = projects
-    .filter(p => !p.groupId)
-    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-
-  const sortedGroups = [...groups].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-
-  const handleProjectDragStart = (_e: React.DragEvent, projectId: string) => {
-    setDraggingProjectId(projectId)
-  }
-
-  const handleProjectDragOver = (e: React.DragEvent, projectId: string, _groupId?: string) => {
-    e.preventDefault()
-    if (draggingProjectId && draggingProjectId !== projectId) {
-      setDragOverProjectId(projectId)
-    }
-  }
-
-  const handleProjectDragLeave = () => {
-    setDragOverProjectId(null)
-  }
-
-  const handleProjectDragEnd = () => {
-    setDraggingProjectId(null)
-    setDragOverProjectId(null)
-    setDragOverGroupId(null)
-  }
-
-  const handleProjectDrop = async (e: React.DragEvent, targetProjectId: string, targetGroupId?: string) => {
-    e.preventDefault()
-    e.stopPropagation()
-    
-    const draggedId = e.dataTransfer.getData('text/plain').replace('project:', '')
-    
-    if (!draggedId || draggedId === targetProjectId) {
-      setDraggingProjectId(null)
-      setDragOverProjectId(null)
-      return
-    }
-
-    // Get all projects
-    const sourceProject = projects.find(p => p.id === draggedId)
-    const targetProject = projects.find(p => p.id === targetProjectId)
-    
-    if (!sourceProject || !targetProject) {
-      setDraggingProjectId(null)
-      setDragOverProjectId(null)
-      return
-    }
-
-    // Determine the target group (where we're dropping)
-    // Pass empty string for ungrouped, or the groupId for a group
-    const targetGroup = targetGroupId || ''  // Empty string means ungrouped
-
-    // Get projects in the target group (or ungrouped)
-    const groupProjects = targetGroup 
-      ? projects.filter(p => p.groupId === targetGroup)
-      : projects.filter(p => !p.groupId)
-    
-    // Sort by order
-    const sortedProjects = [...groupProjects].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-    
-    // Remove dragged project if it's already in this group
-    const filteredProjects = sortedProjects.filter(p => p.id !== draggedId)
-    
-    // Find insertion index
-    const targetIndex = filteredProjects.findIndex(p => p.id === targetProjectId)
-    
-    if (targetIndex === -1) {
-      setDraggingProjectId(null)
-      setDragOverProjectId(null)
-      return
-    }
-    
-    // Insert dragged project at target position
-    filteredProjects.splice(targetIndex, 0, sourceProject)
-    
-    // Get the ordered IDs
-    const orderedIds = filteredProjects.map(p => p.id)
-    
-    // Call reorder - this will update both order and groupId
-    await reorderProjects(orderedIds, targetGroup)
-    
-    setDraggingProjectId(null)
-    setDragOverProjectId(null)
-  }
-
-  const handleGroupDragOver = (e: React.DragEvent, groupId: string) => {
-    if (draggingProjectId) {
-      e.preventDefault()
-      setDragOverGroupId(groupId)
-    }
-  }
-
-  const handleGroupDrop = async (e: React.DragEvent, targetGroupId: string) => {
-    e.preventDefault()
-    
-    if (draggingProjectId) {
-      // Move project to this group
-      const groupProjects = projects.filter(p => p.groupId === targetGroupId || p.id === draggingProjectId)
-      const sortedProjects = [...groupProjects].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-      
-      // Remove dragged project and add at end
-      const filteredProjects = sortedProjects.filter(p => p.id !== draggingProjectId)
-      const draggedProject = projects.find(p => p.id === draggingProjectId)
-      if (draggedProject) {
-        filteredProjects.push(draggedProject)
-      }
-      
-      const orderedIds = filteredProjects.map(p => p.id)
-      await reorderProjects(orderedIds, targetGroupId)
-    }
-    
-    setDraggingProjectId(null)
-    setDragOverGroupId(null)
-  }
-
+  // Auto-expand projects with matching terminals when searching
   useEffect(() => {
     if (searchQuery.trim()) {
       const projectsWithMatches = projects.filter(p => 
@@ -714,27 +319,8 @@ export default function Sidebar() {
         projectsWithMatches.forEach(p => next.add(p.id))
         return next
       })
-      setExpandedGroups(prev => {
-        const next = new Set(prev)
-        projectsWithMatches.forEach(p => {
-          if (p.groupId) next.add(p.groupId)
-        })
-        return next
-      })
     }
   }, [searchQuery, projects])
-
-  const toggleGroup = (id: string) => {
-    setExpandedGroups(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        next.add(id)
-      }
-      return next
-    })
-  }
 
   const toggleProject = (id: string) => {
     setExpandedProjects(prev => {
@@ -781,6 +367,7 @@ export default function Sidebar() {
     }
   }
 
+  // Handle drag and drop
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
     setDragOver(true)
@@ -793,22 +380,26 @@ export default function Sidebar() {
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault()
     setDragOver(false)
-
+    
+    // Get dropped files
     const files = e.dataTransfer.files
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
-      const path = (file as File & { path?: string }).path
+      // Check if it's a directory (path property in Electron)
+      const path = (file as any).path || file.name
       if (path) {
         const folderName = path.split(/[\\/]/).pop() || 'New Project'
         const project = await createProject(folderName, path)
-        await createTerminal(project.id, 'Terminal 1', 'powershell', path)
+        // Create default terminal
+        await createTerminal(
+          project.id,
+          'Terminal 1',
+          'powershell',
+          path
+        )
         setExpandedProjects(prev => new Set([...prev, project.id]))
       }
     }
-  }
-
-  const handleDragEnd = () => {
-    setDragOver(false)
   }
 
   return (
@@ -818,11 +409,19 @@ export default function Sidebar() {
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      onDragEnd={handleDragEnd}
     >
       {/* Header */}
-      <div className="px-4 py-3 border-b border-border-color">
+      <div className="px-4 py-3 border-b border-border-color flex items-center justify-between">
         <h1 className="font-bold text-lg">Terminal Orchestrator</h1>
+        {onOpenSettings && (
+          <button
+            onClick={onOpenSettings}
+            className="flex items-center px-2 py-1 bg-[#3c3c3c] hover:bg-[#4ec9b0] rounded text-white hover:text-[#1e1e1e] transition-colors text-sm font-medium border border-[#4ec9b0]"
+            title="Open Settings"
+          >
+            <span>⚙️</span>
+          </button>
+        )}
       </div>
       
       {/* Search bar */}
@@ -846,77 +445,24 @@ export default function Sidebar() {
         </div>
       </div>
       
-      {/* Groups and Projects list */}
+      {/* Projects list */}
       <div className="flex-1 overflow-y-auto p-2">
-        {/* Render groups with their projects */}
-        {sortedGroups.map(group => (
-          <GroupItem
-            key={group.id}
-            group={group}
-            projects={getProjectsByGroup(group.id)}
-            isExpanded={expandedGroups.has(group.id)}
-            onToggle={() => toggleGroup(group.id)}
+        {projects.map(project => (
+          <ProjectItem
+            key={project.id}
+            project={project}
+            isExpanded={expandedProjects.has(project.id)}
+            onToggle={() => toggleProject(project.id)}
             editingTerminalId={editingTerminalId}
             onTerminalContextMenu={handleTerminalContextMenu}
             onTerminalRenameComplete={handleRenameComplete}
-            getFilteredTerminals={getFilteredTerminals}
-            onDragOver={handleGroupDragOver}
-            onDrop={handleGroupDrop}
-            isDragOver={dragOverGroupId === group.id}
-            onProjectDragStart={handleProjectDragStart}
-            onProjectDragOver={handleProjectDragOver}
-            onProjectDragLeave={handleProjectDragLeave}
-            onProjectDrop={handleProjectDrop}
-            onProjectDragEnd={handleProjectDragEnd}
-            draggingProjectId={draggingProjectId}
+            filteredTerminals={getFilteredTerminals(project)}
           />
         ))}
-        
-        {/* Ungrouped projects */}
-        {ungroupedProjects.length > 0 && (
-          <div className="mb-1">
-            {sortedGroups.length > 0 && (
-              <div className="px-3 py-1 text-xs text-gray-500 font-medium">
-                Ungrouped
-              </div>
-            )}
-            {ungroupedProjects.map(project => (
-              <ProjectItem
-                key={project.id}
-                project={project}
-                isExpanded={expandedProjects.has(project.id)}
-                onToggle={() => toggleProject(project.id)}
-                editingTerminalId={editingTerminalId}
-                onTerminalContextMenu={handleTerminalContextMenu}
-                onTerminalRenameComplete={handleRenameComplete}
-                filteredTerminals={getFilteredTerminals(project)}
-                onDragStart={handleProjectDragStart}
-                onDragOver={handleProjectDragOver}
-                onDragLeave={handleProjectDragLeave}
-                onDrop={handleProjectDrop}
-                onDragEnd={handleProjectDragEnd}
-                isDragging={draggingProjectId === project.id}
-                isDragOver={dragOverProjectId === project.id}
-              />
-            ))}
-          </div>
-        )}
       </div>
       
       {/* Footer actions */}
-      <div className="p-3 border-t border-border-color space-y-2">
-        {/* Create Group button */}
-        <button
-          onClick={async () => {
-            const group = await createGroup('New Group')
-            setExpandedGroups(prev => new Set([...prev, group.id]))
-          }}
-          className="w-full py-1.5 px-3 bg-[#3c3c3c] hover:bg-[#4c4c4c] rounded text-sm transition-colors flex items-center justify-center gap-2"
-        >
-          <span>📁</span> New Group
-        </button>
-        
-        {/* Create Project button */}
+      <div className="p-3 border-t border-border-color">
         <button
           onClick={async () => {
             const project = await createProject('New Project')

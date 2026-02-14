@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC_CHANNELS } from '@shared/ipc'
-import type { TerminalDataBatch, TerminalExitEvent, PtyConfig, WorktreeCreateOptions, WorktreeCreateResult, GitBranch } from '@shared/ipc'
+import type { TerminalDataBatch, TerminalExitEvent, PtyConfig, WorktreeCreateOptions, WorktreeCreateResult, GitBranch, WebUIStatus } from '@shared/ipc'
 import type { Project, ProjectGroup, Terminal, AppConfig, AppSettings } from '@shared/types'
 
 // Exposed API to renderer
@@ -115,6 +115,18 @@ const electronAPI = {
   shell: {
     openFolder: (folderPath: string): Promise<string> =>
       ipcRenderer.invoke(IPC_CHANNELS.SHELL_OPEN_FOLDER, folderPath)
+  },
+
+  // Web UI operations
+  webui: {
+    start: (): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.WEBUI_START),
+    stop: (): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.WEBUI_STOP),
+    getStatus: (): Promise<WebUIStatus> =>
+      ipcRenderer.invoke(IPC_CHANNELS.WEBUI_STATUS),
+    regeneratePin: (): Promise<{ pin: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.WEBUI_REGENERATE_PIN)
   },
 
   // Initialize main window reference
