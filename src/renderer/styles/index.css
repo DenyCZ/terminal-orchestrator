@@ -50,6 +50,16 @@ html, body, #root {
   padding: 8px;
 }
 
+/* Fix xterm.js scrolling - viewport needs explicit overflow */
+.xterm .xterm-viewport {
+  overflow-y: auto !important;
+}
+
+/* Ensure terminal container fills available space properly */
+.xterm .xterm-screen {
+  width: 100% !important;
+}
+
 /* Drag and drop highlight */
 .drag-over {
   background-color: rgba(78, 201, 176, 0.1) !important;
