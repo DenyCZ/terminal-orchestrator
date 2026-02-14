@@ -13,6 +13,7 @@ interface ContextMenuState {
   y: number
   terminalId: string | null
   projectId: string | null
+  terminalStatus: Terminal['status'] | null
 }
 
 // Status indicator component
@@ -42,6 +43,10 @@ function TerminalContextMenu({
   y,
   onRename,
   onDelete,
+  onStop,
+  onStart,
+  canStop,
+  canStart,
   onClose
 }: {
   visible: boolean
@@ -49,6 +54,10 @@ function TerminalContextMenu({
   y: number
   onRename: () => void
   onDelete: () => void
+  onStop: () => void
+  onStart: () => void
+  canStop: boolean
+  canStart: boolean
   onClose: () => void
 }) {
   const menuRef = useRef<HTMLDivElement>(null)
@@ -87,6 +96,20 @@ function TerminalContextMenu({
     setTimeout(() => onDelete(), 10)
   }
 
+  const handleStopClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    onClose()
+    setTimeout(() => onStop(), 10)
+  }
+
+  const handleStartClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    onClose()
+    setTimeout(() => onStart(), 10)
+  }
+
   return (
     <div
       ref={menuRef}
@@ -94,6 +117,23 @@ function TerminalContextMenu({
       style={{ left: x, top: y }}
       onClick={handleMenuClick}
     >
+      {canStop && (
+        <button
+          onClick={handleStopClick}
+          className="w-full px-3 py-1.5 text-left text-sm hover:bg-[#37373d] flex items-center gap-2"
+        >
+          <span>⏹️</span> Stop
+        </button>
+      )}
+      {canStart && (
+        <button
+          onClick={handleStartClick}
+          className="w-full px-3 py-1.5 text-left text-sm hover:bg-[#37373d] flex items-center gap-2"
+        >
+          <span>▶️</span> Start
+        </button>
+      )}
+      {(canStop || canStart) && <div className="border-t border-[#3c3c3c] my-1" />}
       <button
         onClick={handleRenameClick}
         className="w-full px-3 py-1.5 text-left text-sm hover:bg-[#37373d] flex items-center gap-2"
@@ -129,7 +169,7 @@ function TerminalItem({
   isEditing: boolean
   onRenameComplete: (newName: string) => void
 }) {
-  const { startTerminal, stopTerminal } = useAppStore()
+  const { deleteTerminal } = useAppStore()
   const [editName, setEditName] = useState(terminal.name)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -187,25 +227,18 @@ function TerminalItem({
       <StatusIndicator status={terminal.status} />
       <span className="flex-1 text-sm truncate">{terminal.name}</span>
       
-      <div className="hidden group-hover:flex gap-1 items-center">
-        {terminal.status === 'running' ? (
-          <button
-            onClick={(e) => { e.stopPropagation(); stopTerminal(terminal.id) }}
-            className="p-1 hover:bg-red-600 rounded text-xs"
-            title="Stop"
-          >
-            ■
-          </button>
-        ) : (
-          <button
-            onClick={(e) => { e.stopPropagation(); startTerminal(projectId, terminal.id) }}
-            className="p-1 hover:bg-green-600 rounded text-xs"
-            title="Start"
-          >
-            ▶
-          </button>
-        )}
-      </div>
+      <button
+        onClick={(e) => {
+          e.stopPropagation()
+          if (confirm(`Delete terminal "${terminal.name}"?`)) {
+            deleteTerminal(projectId, terminal.id)
+          }
+        }}
+        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-600 rounded text-xs transition-opacity"
+        title="Delete terminal"
+      >
+        🗑️
+      </button>
     </div>
   )
 }
@@ -577,7 +610,8 @@ export default function Sidebar({ onOpenSettings }: SidebarProps) {
     x: 0,
     y: 0,
     terminalId: null,
-    projectId: null
+    projectId: null,
+    terminalStatus: null
   })
   const [editingTerminalId, setEditingTerminalId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
@@ -751,12 +785,15 @@ export default function Sidebar({ onOpenSettings }: SidebarProps) {
   const handleTerminalContextMenu = (e: React.MouseEvent, terminalId: string, projectId: string) => {
     e.preventDefault()
     e.stopPropagation()
+    const project = projects.find(p => p.id === projectId)
+    const terminal = project?.terminals.find(t => t.id === terminalId)
     setContextMenu({
       visible: true,
       x: e.clientX,
       y: e.clientY,
       terminalId,
-      projectId
+      projectId,
+      terminalStatus: terminal?.status || null
     })
   }
 
@@ -771,6 +808,25 @@ export default function Sidebar({ onOpenSettings }: SidebarProps) {
       if (confirm('Delete this terminal?')) {
         deleteTerminal(contextMenu.projectId, contextMenu.terminalId)
       }
+    }
+  }
+
+  const handleStop = () => {
+    if (contextMenu.terminalId && contextMenu.projectId) {
+      const project = projects.find(p => p.id === contextMenu.projectId)
+      const terminal = project?.terminals.find(t => t.id === contextMenu.terminalId)
+      if (terminal) {
+        // Use ipc to stop terminal - get from store
+        const { stopTerminal } = useAppStore.getState()
+        stopTerminal(terminal.id)
+      }
+    }
+  }
+
+  const handleStart = () => {
+    if (contextMenu.terminalId && contextMenu.projectId) {
+      const { startTerminal } = useAppStore.getState()
+      startTerminal(contextMenu.projectId!, contextMenu.terminalId!)
     }
   }
 
@@ -939,6 +995,10 @@ export default function Sidebar({ onOpenSettings }: SidebarProps) {
         y={contextMenu.y}
         onRename={handleRename}
         onDelete={handleDelete}
+        onStop={handleStop}
+        onStart={handleStart}
+        canStop={contextMenu.terminalStatus === 'running'}
+        canStart={contextMenu.terminalStatus !== 'running' && contextMenu.terminalStatus !== null}
         onClose={() => setContextMenu(prev => ({ ...prev, visible: false }))}
       />
     </div>

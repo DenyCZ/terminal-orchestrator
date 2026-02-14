@@ -53,11 +53,35 @@ html, body, #root {
 /* Fix xterm.js scrolling - viewport needs explicit overflow */
 .xterm .xterm-viewport {
   overflow-y: auto !important;
+  /* Native-like smooth scrolling */
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  /* Better scroll performance */
+  overscroll-behavior: contain;
 }
 
 /* Ensure terminal container fills available space properly */
 .xterm .xterm-screen {
   width: 100% !important;
+}
+
+/* Terminal container must fill available height */
+.terminal-wrapper {
+  display: flex;
+  flex-direction: column;
+}
+
+.terminal-container {
+  height: 100%;
+  width: 100%;
+}
+
+.terminal-container .xterm {
+  height: 100%;
+}
+
+.terminal-container .xterm-viewport {
+  height: 100% !important;
 }
 
 /* Drag and drop highlight */

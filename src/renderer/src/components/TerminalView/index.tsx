@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
+import { ClipboardAddon } from '../../addons/ClipboardAddon'
+import { ImageAddon } from '../../addons/ImageAddon'
 import { useAppStore } from '../../store'
 import type { Terminal as TerminalType } from '@shared/types'
 import type { FileEntry } from '@shared/ipc'
@@ -45,6 +47,8 @@ export default function TerminalView({
   const containerRef = useRef<HTMLDivElement>(null)
   const terminalRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
+  const clipboardAddonRef = useRef<ClipboardAddon | null>(null)
+  const imageAddonRef = useRef<ImageAddon | null>(null)
   const hasStartedRef = useRef(false)
   const { startTerminal, stopTerminal, restartTerminal } = useAppStore()
   
@@ -90,12 +94,21 @@ export default function TerminalView({
       },
       scrollback: 5000,
       convertEol: true,
-      smoothScrollDuration: 125
+      // Native-like scrolling configuration
+      smoothScrollDuration: 150,
+      scrollSensitivity: 1.5,
+      fastScrollSensitivity: 7,
+      scrollOnUserInput: true
     })
 
     const fitAddon = new FitAddon()
+    const clipboardAddon = new ClipboardAddon()
+    const imageAddon = new ImageAddon()
+    
     term.loadAddon(fitAddon)
     term.loadAddon(new WebLinksAddon())
+    term.loadAddon(clipboardAddon)
+    term.loadAddon(imageAddon)
 
     // Open terminal before fitting
     term.open(containerRef.current)
@@ -105,6 +118,8 @@ export default function TerminalView({
       fitAddon.fit()
       terminalRef.current = term
       fitAddonRef.current = fitAddon
+      clipboardAddonRef.current = clipboardAddon
+      imageAddonRef.current = imageAddon
 
       if (terminal.status === 'idle' && !hasStartedRef.current) {
         hasStartedRef.current = true
@@ -166,6 +181,26 @@ export default function TerminalView({
       window.electronAPI?.terminal.write(terminal.id, data)
     })
 
+    // Custom wheel handler for Ctrl+wheel zoom
+    term.attachCustomWheelEventHandler((event) => {
+      if (event.ctrlKey) {
+        const delta = event.deltaY > 0 ? -1 : 1
+        const currentSize = term.options.fontSize || 14
+        const newSize = Math.max(8, Math.min(32, currentSize + delta))
+        term.options.fontSize = newSize
+        // Refit terminal after zoom
+        requestAnimationFrame(() => {
+          fitAddonRef.current?.fit()
+          if (terminalRef.current) {
+            const { cols, rows } = terminalRef.current
+            window.electronAPI?.terminal.resize(terminal.id, cols, rows)
+          }
+        })
+        return false
+      }
+      return true
+    })
+
     // Handle output with auto-scroll to bottom
     const removeDataListener = window.electronAPI?.terminal.onData((data) => {
       if (data.terminalId === terminal.id && terminalRef.current) {
@@ -179,6 +214,8 @@ export default function TerminalView({
       clearTimeout(resizeTimeout)
       resizeObserver.disconnect()
       removeDataListener?.()
+      clipboardAddonRef.current = null
+      imageAddonRef.current = null
       term.dispose()
       terminalRef.current = null
       fitAddonRef.current = null
