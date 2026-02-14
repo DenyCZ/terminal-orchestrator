@@ -1,4 +1,4 @@
-import type { Project, ProjectGroup, Terminal, AppConfig, AppSettings } from '@shared/types'
+import type { Project, ProjectGroup, Terminal, AppConfig, AppSettings, DetectedShell, ShellType } from '@shared/types'
 import type { TerminalDataBatch, TerminalExitEvent, WorktreeCreateOptions, WorktreeCreateResult, GitBranch, WebUIStatus } from '@shared/ipc'
 
 export interface ElectronAPI {
@@ -22,7 +22,7 @@ export interface ElectronAPI {
     create: (
       projectId: string,
       name: string,
-      shellType: 'cmd' | 'powershell',
+      shellType: ShellType,
       workingDirectory: string,
       startupCommand?: string
     ) => Promise<Terminal | undefined>
@@ -55,6 +55,7 @@ export interface ElectronAPI {
   
   shell: {
     openFolder: (folderPath: string) => Promise<string>
+    listAvailable: () => Promise<DetectedShell[]>
   }
   
   webui: {

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Project, ProjectGroup, Terminal, AppConfig, ShortcutConfig, KeyBinding } from '@shared/types'
+import type { Project, ProjectGroup, Terminal, AppConfig, ShortcutConfig, KeyBinding, ShellType } from '@shared/types'
 import { DEFAULT_SHORTCUTS, DEFAULT_SETTINGS } from '@shared/types'
 import type { TerminalDataBatch } from '@shared/ipc'
 
@@ -33,7 +33,7 @@ interface AppState {
   createTerminal: (
     projectId: string,
     name: string,
-    shellType: 'cmd' | 'powershell',
+    shellType: ShellType,
     workingDirectory: string,
     startupCommand?: string
   ) => Promise<Terminal | undefined>
@@ -202,7 +202,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   createTerminal: async (
     projectId: string,
     name: string,
-    shellType: 'cmd' | 'powershell',
+    shellType: ShellType,
     workingDirectory: string,
     startupCommand?: string
   ) => {

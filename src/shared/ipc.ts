@@ -47,7 +47,8 @@ export const IPC_CHANNELS = {
 
   // Shell operations
   SHELL_OPEN_FOLDER: 'shell:open-folder',
-  
+  SHELL_LIST: 'shell:list',
+   
   // Web UI operations
   WEBUI_START: 'webui:start',
   WEBUI_STOP: 'webui:stop',

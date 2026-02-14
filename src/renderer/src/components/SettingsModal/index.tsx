@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useAppStore } from '../../store';
-import { SHORTCUT_DEFINITIONS, DEFAULT_SHORTCUTS, DEFAULT_SETTINGS, type KeyBinding, type ShortcutId } from '@shared/types';
+import { SHORTCUT_DEFINITIONS, DEFAULT_SHORTCUTS, DEFAULT_SETTINGS, type KeyBinding, type ShortcutId, type DetectedShell, type ShellType } from '@shared/types';
 import type { WebUIStatus } from '@shared/ipc';
 
 interface SettingsModalProps {
@@ -19,6 +19,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [pendingBinding, setPendingBinding] = useState<KeyBinding | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
   const [webUIStatus, setWebUIStatus] = useState<WebUIStatus | null>(null);
+  const [availableShells, setAvailableShells] = useState<DetectedShell[]>([]);
   
   const { 
     settings, 
@@ -29,6 +30,22 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   
   // Get current shortcuts from settings or defaults
   const shortcuts = settings.keyboardShortcuts || DEFAULT_SHORTCUTS;
+  
+  // Load available shells
+  useEffect(() => {
+    if (isOpen) {
+      loadAvailableShells();
+    }
+  }, [isOpen]);
+  
+  const loadAvailableShells = async () => {
+    try {
+      const shells = await window.electronAPI.shell.listAvailable();
+      setAvailableShells(shells);
+    } catch (error) {
+      console.error('Failed to load available shells:', error);
+    }
+  };
   
   // Load Web UI status
   useEffect(() => {
@@ -330,10 +347,13 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   <select 
                     className="settings-select"
                     value={settings.defaultShell}
-                    onChange={(e) => useAppStore.getState().updateSettings({ defaultShell: e.target.value as 'cmd' | 'powershell' })}
+                    onChange={(e) => useAppStore.getState().updateSettings({ defaultShell: e.target.value as ShellType })}
                   >
-                    <option value="powershell">PowerShell</option>
-                    <option value="cmd">Command Prompt</option>
+                    {availableShells.map(shell => (
+                      <option key={shell.id} value={shell.id}>
+                        {shell.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>

@@ -3,9 +3,10 @@ import { ConfigStore } from '../store'
 import { PtyManager } from '../pty'
 import { IPC_CHANNELS } from '@shared/ipc'
 import type { PtyConfig, TerminalDataBatch, TerminalExitEvent } from '@shared/ipc'
-import type { Terminal, Project, ProjectGroup, WebUISettings, AppSettings } from '@shared/types'
+import type { Terminal, Project, ProjectGroup, WebUISettings, AppSettings, DetectedShell, ShellType } from '@shared/types'
 import * as git from '../git'
 import { WebUIManager } from '../web-ui-manager'
+import { detectShells } from '../shell-detector'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -100,7 +101,7 @@ export function setupIpcHandlers(): void {
       _,
       projectId: string,
       name: string,
-      shellType: 'cmd' | 'powershell',
+      shellType: ShellType,
       workingDirectory: string,
       startupCommand?: string
     ): Terminal | undefined => {
@@ -261,6 +262,10 @@ export function setupIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.SHELL_OPEN_FOLDER, (_, folderPath: string): Promise<string> => {
     return shell.openPath(folderPath)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SHELL_LIST, (): DetectedShell[] => {
+    return detectShells()
   })
 
   // =====================

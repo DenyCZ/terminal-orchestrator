@@ -3,6 +3,7 @@ import type { ConfigStore } from '../store';
 import type { PtyManager } from '../pty';
 import type { ServerConfig } from './types';
 import * as qrcode from 'qrcode';
+import { detectShells } from '../shell-detector';
 
 // Get local IP addresses
 function getLocalAddresses(): string[] {
@@ -56,6 +57,15 @@ export function createRoutes(
       url,
       qrCode: qrCodeData
     });
+  });
+  
+  // =====================
+  // Shells
+  // =====================
+  
+  router.get('/shells', (req, res) => {
+    const shells = detectShells();
+    res.json(shells);
   });
   
   // =====================

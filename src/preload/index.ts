@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC_CHANNELS } from '@shared/ipc'
 import type { TerminalDataBatch, TerminalExitEvent, PtyConfig, WorktreeCreateOptions, WorktreeCreateResult, GitBranch, WebUIStatus } from '@shared/ipc'
-import type { Project, ProjectGroup, Terminal, AppConfig, AppSettings } from '@shared/types'
+import type { Project, ProjectGroup, Terminal, AppConfig, AppSettings, DetectedShell, ShellType } from '@shared/types'
 
 // Exposed API to renderer
 const electronAPI = {
@@ -36,7 +36,7 @@ const electronAPI = {
     create: (
       projectId: string,
       name: string,
-      shellType: 'cmd' | 'powershell',
+      shellType: ShellType,
       workingDirectory: string,
       startupCommand?: string
     ): Promise<Terminal | undefined> =>
@@ -114,7 +114,9 @@ const electronAPI = {
   // Shell operations
   shell: {
     openFolder: (folderPath: string): Promise<string> =>
-      ipcRenderer.invoke(IPC_CHANNELS.SHELL_OPEN_FOLDER, folderPath)
+      ipcRenderer.invoke(IPC_CHANNELS.SHELL_OPEN_FOLDER, folderPath),
+    listAvailable: (): Promise<DetectedShell[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SHELL_LIST)
   },
 
   // Web UI operations

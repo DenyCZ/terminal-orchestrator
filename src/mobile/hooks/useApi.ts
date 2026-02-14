@@ -76,6 +76,8 @@ export function useApi() {
       body: JSON.stringify({ projectId })
     }), [request])
   
+  const getAvailableShells = useCallback(() => request('/shells'), [request])
+  
   return {
     authenticate,
     getProjects,
@@ -83,5 +85,6 @@ export function useApi() {
     stopTerminal,
     createTerminal,
     deleteTerminal,
+    getAvailableShells,
   }
 }

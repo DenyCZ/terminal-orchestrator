@@ -1,5 +1,5 @@
 import Store from 'electron-store'
-import type { AppConfig, Project, ProjectGroup, Terminal } from '@shared/types'
+import type { AppConfig, Project, ProjectGroup, Terminal, ShellType } from '@shared/types'
 import { DEFAULT_CONFIG } from '@shared/types'
 import { v4 as uuid } from 'uuid'
 
@@ -209,7 +209,7 @@ export class ConfigStore {
   createTerminal(
     projectId: string,
     name: string,
-    shellType: 'cmd' | 'powershell',
+    shellType: ShellType,
     workingDirectory: string,
     startupCommand?: string
   ): Terminal | undefined {

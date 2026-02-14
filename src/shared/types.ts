@@ -1,4 +1,26 @@
-export type ShellType = 'cmd' | 'powershell';
+// Shell types - extended to support multiple shell environments
+export type ShellType = 'cmd' | 'powershell' | 'pwsh' | 'git-bash' | 'wsl' | 'cygwin' | 'msys2' | 'custom';
+
+// Shell category for internal use
+export type ShellCategory = 'cmd' | 'powershell' | 'pwsh' | 'bash' | 'wsl';
+
+// Detected shell information
+export interface DetectedShell {
+  id: string           // e.g., 'git-bash', 'wsl-ubuntu'
+  name: string         // Display name
+  type: ShellCategory  // Shell category for PTY handling
+  path: string         // Executable path
+  args?: string[]      // Default args (e.g., for WSL: ['-d', 'Ubuntu'])
+  available: boolean
+}
+
+// Custom shell definition for user-defined shells
+export interface ShellDefinition {
+  id: string
+  name: string
+  path: string
+  args?: string[]
+}
 
 export type TerminalStatus = 'idle' | 'running' | 'stopped' | 'completed' | 'error';
 

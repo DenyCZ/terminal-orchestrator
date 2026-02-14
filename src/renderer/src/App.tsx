@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useAppStore } from './store'
 import Sidebar from './components/Sidebar'
 import TerminalView from './components/TerminalView'
@@ -8,6 +8,7 @@ import InlinePrompt, { type PromptField } from './components/InlinePrompt'
 import HelpModal from './components/HelpModal'
 import SettingsModal from './components/SettingsModal'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
+import type { ShellType, DetectedShell } from '@shared/types'
 
 type PromptMode = 'none' | 'new-terminal' | 'new-project' | 'new-worktree'
 
@@ -33,11 +34,25 @@ function App() {
   const [promptMode, setPromptMode] = useState<PromptMode>('none')
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false)
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
+  const [availableShells, setAvailableShells] = useState<DetectedShell[]>([])
   const hasCheckedStartup = useRef(false)
 
   useEffect(() => {
     loadConfig()
   }, [loadConfig])
+  
+  // Load available shells
+  useEffect(() => {
+    const loadShells = async () => {
+      try {
+        const shells = await window.electronAPI.shell.listAvailable()
+        setAvailableShells(shells)
+      } catch (error) {
+        console.error('Failed to load available shells:', error)
+      }
+    }
+    loadShells()
+  }, [])
 
   useEffect(() => {
     if (isLoading || hasCheckedStartup.current) return
@@ -198,9 +213,9 @@ function App() {
         await createTerminal(
           projectId,
           values.name || 'New Terminal',
-          (values.shell as 'cmd' | 'powershell') || settings.defaultShell,
-          cwd,
-          values.command
+           (values.shell as ShellType) || settings.defaultShell,
+           cwd,
+           values.command
         )
       }
     } else if (promptMode === 'new-project') {
@@ -245,21 +260,23 @@ function App() {
     setPromptMode('none')
   }, [])
 
-  const newTerminalFields: PromptField[] = [
+  const newTerminalFields: PromptField[] = useMemo(() => [
     { key: 'name', label: 'Name', type: 'text', placeholder: 'Terminal name', required: true },
     { 
       key: 'shell', 
       label: 'Shell', 
       type: 'select', 
       defaultValue: settings.defaultShell,
-      options: [
-        { value: 'powershell', label: 'PowerShell' },
-        { value: 'cmd', label: 'Command Prompt' }
-      ]
+      options: availableShells.length > 0 
+        ? availableShells.map(shell => ({ value: shell.id, label: shell.name }))
+        : [
+            { value: 'powershell', label: 'PowerShell' },
+            { value: 'cmd', label: 'Command Prompt' }
+          ]
     },
     { key: 'path', label: 'Path', type: 'text', placeholder: activeProject?.rootDirectory || 'Working directory' },
     { key: 'command', label: 'Command', type: 'text', placeholder: 'Startup command (optional)' }
-  ]
+  ], [settings.defaultShell, availableShells, activeProject?.rootDirectory])
 
   const newProjectFields: PromptField[] = [
     { key: 'name', label: 'Name', type: 'text', placeholder: 'Project name', required: true },

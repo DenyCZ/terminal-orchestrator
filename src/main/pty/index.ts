@@ -216,31 +216,77 @@ export class PtyManager {
     this.batcher.setWindow(window)
   }
 
-  private getShell(shellType: ShellType): string {
+  private getShell(shellType: ShellType): { shell: string; args: string[] } {
     if (process.platform !== 'win32') {
-      return process.env.SHELL || '/bin/bash'
+      return { shell: process.env.SHELL || '/bin/bash', args: [] }
     }
 
+    const fs = require('fs')
+    
     switch (shellType) {
       case 'cmd':
-        return process.env.COMSPEC || 'C:\\Windows\\System32\\cmd.exe'
+        return { 
+          shell: process.env.COMSPEC || 'C:\\Windows\\System32\\cmd.exe', 
+          args: [] 
+        }
+      case 'pwsh': {
+        const pwshCore = 'C:\\Program Files\\PowerShell\\7\\pwsh.exe'
+        if (fs.existsSync(pwshCore)) {
+          return { shell: pwshCore, args: [] }
+        }
+        // Fallback to Windows PowerShell
+        return { shell: 'powershell.exe', args: [] }
+      }
+      case 'git-bash': {
+        const gitBashPaths = [
+          'C:\\Program Files\\Git\\bin\\bash.exe',
+          'C:\\Program Files (x86)\\Git\\bin\\bash.exe'
+        ]
+        for (const bashPath of gitBashPaths) {
+          if (fs.existsSync(bashPath)) {
+            return { shell: bashPath, args: ['--login', '-i'] }
+          }
+        }
+        // Fallback to PowerShell if Git Bash not found
+        return { shell: 'powershell.exe', args: [] }
+      }
+      case 'wsl':
+        return { shell: 'wsl.exe', args: [] }
+      case 'cygwin': {
+        const cygwinPaths = [
+          'C:\\cygwin64\\bin\\bash.exe',
+          'C:\\cygwin\\bin\\bash.exe'
+        ]
+        for (const cygwinPath of cygwinPaths) {
+          if (fs.existsSync(cygwinPath)) {
+            return { shell: cygwinPath, args: ['--login', '-i'] }
+          }
+        }
+        return { shell: 'powershell.exe', args: [] }
+      }
+      case 'msys2': {
+        const msys2Path = 'C:\\msys64\\usr\\bin\\bash.exe'
+        if (fs.existsSync(msys2Path)) {
+          return { shell: msys2Path, args: ['--login', '-i'] }
+        }
+        return { shell: 'powershell.exe', args: [] }
+      }
       case 'powershell':
       default:
         // Try PowerShell Core first, then Windows PowerShell
         const pwshCore = 'C:\\Program Files\\PowerShell\\7\\pwsh.exe'
-        const fs = require('fs')
         if (fs.existsSync(pwshCore)) {
-          return pwshCore
+          return { shell: pwshCore, args: [] }
         }
-        return 'powershell.exe'
+        return { shell: 'powershell.exe', args: [] }
     }
   }
 
   async spawn(config: PtyConfig): Promise<{ terminalId: string; pid: number }> {
-    const shell = this.getShell(config.shellType)
+    const { shell, args: shellArgs } = this.getShell(config.shellType)
     const session = uuid()
 
-    const ptyProcess = await createPty(shell, [], {
+    const ptyProcess = await createPty(shell, shellArgs, {
       cols: config.cols,
       rows: config.rows,
       cwd: config.cwd,

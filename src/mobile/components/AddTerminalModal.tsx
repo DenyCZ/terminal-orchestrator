@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import type { ShellType } from '@shared/types'
+import { useState, useEffect } from 'react'
+import type { ShellType, DetectedShell } from '@shared/types'
+import { useApi } from '../hooks/useApi'
 
 interface AddTerminalModalProps {
   isOpen: boolean
@@ -15,6 +16,28 @@ export function AddTerminalModal({ isOpen, onClose, onAdd, projectRootDirectory 
   const [startupCommand, setStartupCommand] = useState('')
   const [isCreating, setIsCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [availableShells, setAvailableShells] = useState<DetectedShell[]>([])
+  const api = useApi()
+  
+  // Load available shells when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      loadShells()
+    }
+  }, [isOpen])
+  
+  const loadShells = async () => {
+    try {
+      const shells = await api.getAvailableShells()
+      setAvailableShells(shells)
+      // Set default shell to first available if current selection not in list
+      if (shells.length > 0 && !shells.find(s => s.id === shellType)) {
+        setShellType(shells[0].id as ShellType)
+      }
+    } catch (err) {
+      console.error('Failed to load available shells:', err)
+    }
+  }
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -99,8 +122,11 @@ export function AddTerminalModal({ isOpen, onClose, onAdd, projectRootDirectory 
               onChange={e => setShellType(e.target.value as ShellType)}
               disabled={isCreating}
             >
-              <option value="powershell">PowerShell</option>
-              <option value="cmd">CMD</option>
+              {availableShells.map(shell => (
+                <option key={shell.id} value={shell.id}>
+                  {shell.name}
+                </option>
+              ))}
             </select>
           </div>
           
