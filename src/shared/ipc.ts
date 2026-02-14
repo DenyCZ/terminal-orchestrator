@@ -3,11 +3,19 @@ export * from './types';
 
 // IPC Channel names
 export const IPC_CHANNELS = {
+  // Group operations
+  GROUP_LIST: 'group:list',
+  GROUP_CREATE: 'group:create',
+  GROUP_UPDATE: 'group:update',
+  GROUP_DELETE: 'group:delete',
+  GROUP_REORDER: 'group:reorder',
+  
   // Project operations
   PROJECT_LIST: 'project:list',
   PROJECT_CREATE: 'project:create',
   PROJECT_UPDATE: 'project:update',
   PROJECT_DELETE: 'project:delete',
+  PROJECT_REORDER: 'project:reorder',
   
   // Terminal operations
   TERMINAL_CREATE: 'terminal:create',

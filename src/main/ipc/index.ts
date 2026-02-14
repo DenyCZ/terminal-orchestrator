@@ -3,7 +3,7 @@ import { ConfigStore } from '../store'
 import { PtyManager } from '../pty'
 import { IPC_CHANNELS } from '@shared/ipc'
 import type { PtyConfig, TerminalDataBatch, TerminalExitEvent } from '@shared/ipc'
-import type { Terminal, Project, AppSettings } from '@shared/types'
+import type { Terminal, Project, ProjectGroup, AppSettings } from '@shared/types'
 import * as git from '../git'
 
 let mainWindow: BrowserWindow | null = null
@@ -18,6 +18,36 @@ export function setupIpcHandlers(): void {
     if (mainWindow) {
       ptyManager.setWindow(mainWindow)
     }
+  })
+
+  // =====================
+  // Group Operations
+  // =====================
+
+  ipcMain.handle(IPC_CHANNELS.GROUP_LIST, (): ProjectGroup[] => {
+    return store.getGroups()
+  })
+
+  ipcMain.handle(
+    IPC_CHANNELS.GROUP_CREATE,
+    (_, name: string, color?: string): ProjectGroup => {
+      return store.createGroup(name, color)
+    }
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.GROUP_UPDATE,
+    (_, id: string, updates: Partial<ProjectGroup>): ProjectGroup | undefined => {
+      return store.updateGroup(id, updates)
+    }
+  )
+
+  ipcMain.handle(IPC_CHANNELS.GROUP_DELETE, (_, id: string): boolean => {
+    return store.deleteGroup(id)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GROUP_REORDER, (_, groupIds: string[]): boolean => {
+    return store.reorderGroups(groupIds)
   })
 
   // =====================
@@ -53,6 +83,10 @@ export function setupIpcHandlers(): void {
       }
     }
     return store.deleteProject(id)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.PROJECT_REORDER, (_, projectIds: string[], groupId?: string): boolean => {
+    return store.reorderProjects(projectIds, groupId)
   })
 
   // =====================

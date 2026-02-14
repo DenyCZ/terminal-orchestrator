@@ -51,10 +51,21 @@ export interface Terminal {
   updatedAt: number;
 }
 
+export interface ProjectGroup {
+  id: string;
+  name: string;
+  color?: string;
+  order: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface Project {
   id: string;
   name: string;
   rootDirectory?: string;
+  groupId?: string;
+  order: number;
   terminals: Terminal[];
   createdAt: number;
   updatedAt: number;
@@ -195,6 +206,7 @@ export const DEFAULT_SHORTCUTS: ShortcutConfig = {
 };
 
 export interface AppConfig {
+  groups: ProjectGroup[];
   projects: Project[];
   settings: AppSettings;
 }
@@ -206,6 +218,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 };
 
 export const DEFAULT_CONFIG: AppConfig = {
+  groups: [],
   projects: [],
   settings: DEFAULT_SETTINGS
 };

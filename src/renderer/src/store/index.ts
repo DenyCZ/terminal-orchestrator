@@ -1,10 +1,11 @@
 import { create } from 'zustand'
-import type { Project, Terminal, AppConfig, ShortcutConfig, KeyBinding } from '@shared/types'
+import type { Project, ProjectGroup, Terminal, AppConfig, ShortcutConfig, KeyBinding } from '@shared/types'
 import { DEFAULT_SHORTCUTS } from '@shared/types'
 import type { TerminalDataBatch } from '@shared/ipc'
 
 interface AppState {
   // Data
+  groups: ProjectGroup[]
   projects: Project[]
   activeProjectId: string | null
   activeTerminalId: string | null
@@ -16,10 +17,17 @@ interface AppState {
   // Actions
   loadConfig: () => Promise<void>
   
+  // Group actions
+  createGroup: (name: string, color?: string) => Promise<ProjectGroup>
+  updateGroup: (id: string, updates: Partial<ProjectGroup>) => Promise<void>
+  deleteGroup: (id: string) => Promise<void>
+  reorderGroups: (groupIds: string[]) => Promise<void>
+  
   // Project actions
   createProject: (name: string, rootDirectory?: string) => Promise<Project>
   updateProject: (id: string, updates: Partial<Project>) => Promise<void>
   deleteProject: (id: string) => Promise<void>
+  reorderProjects: (projectIds: string[], groupId?: string) => Promise<void>
   setActiveProject: (id: string | null) => void
   
   // Terminal actions
@@ -53,6 +61,7 @@ interface AppState {
 
 export const useAppStore = create<AppState>((set, get) => ({
   // Initial state
+  groups: [],
   projects: [],
   activeProjectId: null,
   activeTerminalId: null,
@@ -67,6 +76,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const config = await window.electronAPI.config.load()
       set({
+        groups: config.groups || [],
         projects: config.projects,
         settings: config.settings,
         isLoading: false,
@@ -101,6 +111,45 @@ export const useAppStore = create<AppState>((set, get) => ({
       console.error('Failed to load config:', error)
       set({ isLoading: false })
     }
+  },
+  
+  // Group actions
+  createGroup: async (name: string, color?: string) => {
+    const group = await window.electronAPI.group.create(name, color)
+    set(state => ({
+      groups: [...state.groups, group]
+    }))
+    return group
+  },
+  
+  updateGroup: async (id: string, updates: Partial<ProjectGroup>) => {
+    const updated = await window.electronAPI.group.update(id, updates)
+    if (updated) {
+      set(state => ({
+        groups: state.groups.map(g => g.id === id ? updated : g)
+      }))
+    }
+  },
+  
+  deleteGroup: async (id: string) => {
+    await window.electronAPI.group.delete(id)
+    set(state => ({
+      groups: state.groups.filter(g => g.id !== id),
+      // Remove groupId from projects in this group
+      projects: state.projects.map(p => 
+        p.groupId === id ? { ...p, groupId: undefined } : p
+      )
+    }))
+  },
+  
+  reorderGroups: async (groupIds: string[]) => {
+    await window.electronAPI.group.reorder(groupIds)
+    set(state => ({
+      groups: groupIds.map((id, index) => {
+        const group = state.groups.find(g => g.id === id)
+        return group ? { ...group, order: index } : null
+      }).filter((g): g is ProjectGroup => g !== null)
+    }))
   },
   
   // Project actions
@@ -139,6 +188,24 @@ export const useAppStore = create<AppState>((set, get) => ({
         activeTerminalId: newActiveTerminalId
       }
     })
+  },
+  
+  reorderProjects: async (projectIds: string[], groupId?: string) => {
+    await window.electronAPI.project.reorder(projectIds, groupId)
+    set(state => ({
+      projects: state.projects.map(p => {
+        const index = projectIds.indexOf(p.id)
+        if (index !== -1) {
+          return { 
+            ...p, 
+            order: index,
+            // If groupId is explicitly passed (even if empty/null), use it; otherwise keep existing
+            ...(groupId !== undefined && { groupId: groupId || undefined })
+          }
+        }
+        return p
+      })
+    }))
   },
   
   setActiveProject: (id: string | null) => {

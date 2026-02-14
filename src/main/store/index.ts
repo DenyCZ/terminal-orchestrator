@@ -1,5 +1,5 @@
 import Store from 'electron-store'
-import type { AppConfig, Project, Terminal } from '@shared/types'
+import type { AppConfig, Project, ProjectGroup, Terminal } from '@shared/types'
 import { DEFAULT_CONFIG } from '@shared/types'
 import { v4 as uuid } from 'uuid'
 
@@ -33,6 +33,98 @@ export class ConfigStore {
     this.store.set(STORE_KEY, config)
   }
 
+  // Group operations
+  getGroups(): ProjectGroup[] {
+    return this.getConfig().groups || []
+  }
+
+  getGroup(id: string): ProjectGroup | undefined {
+    return this.getGroups().find((g) => g.id === id)
+  }
+
+  createGroup(name: string, color?: string): ProjectGroup {
+    const config = this.getConfig()
+    const now = Date.now()
+    const maxOrder = config.groups?.length > 0 
+      ? Math.max(...config.groups.map(g => g.order ?? 0)) 
+      : 0
+    
+    const group: ProjectGroup = {
+      id: uuid(),
+      name,
+      color,
+      order: maxOrder + 1,
+      createdAt: now,
+      updatedAt: now
+    }
+
+    if (!config.groups) {
+      config.groups = []
+    }
+    config.groups.push(group)
+    this.saveConfig(config)
+    
+    return group
+  }
+
+  updateGroup(id: string, updates: Partial<Omit<ProjectGroup, 'id' | 'createdAt'>>): ProjectGroup | undefined {
+    const config = this.getConfig()
+    if (!config.groups) {
+      config.groups = []
+    }
+    const index = config.groups.findIndex((g) => g.id === id)
+    
+    if (index === -1) return undefined
+
+    config.groups[index] = {
+      ...config.groups[index],
+      ...updates,
+      updatedAt: Date.now()
+    }
+
+    this.saveConfig(config)
+    return config.groups[index]
+  }
+
+  deleteGroup(id: string): boolean {
+    const config = this.getConfig()
+    if (!config.groups) {
+      config.groups = []
+    }
+    const index = config.groups.findIndex((g) => g.id === id)
+    
+    if (index === -1) return false
+
+    // Remove group from all projects in this group
+    config.projects.forEach((project) => {
+      if (project.groupId === id) {
+        project.groupId = undefined
+      }
+    })
+
+    config.groups.splice(index, 1)
+    this.saveConfig(config)
+    return true
+  }
+
+  reorderGroups(groupIds: string[]): boolean {
+    const config = this.getConfig()
+    if (!config.groups) {
+      config.groups = []
+    }
+    
+    groupIds.forEach((id, index) => {
+      const group = config.groups.find(g => g.id === id)
+      if (group) {
+        group.order = index
+        group.updatedAt = Date.now()
+      }
+    })
+    
+    this.saveConfig(config)
+    return true
+  }
+
   // Project operations
   getProjects(): Project[] {
     return this.getConfig().projects
@@ -45,11 +137,15 @@ export class ConfigStore {
   createProject(name: string, rootDirectory?: string): Project {
     const config = this.getConfig()
     const now = Date.now()
+    const maxOrder = config.projects.length > 0 
+      ? Math.max(...config.projects.map(p => p.order ?? 0)) 
+      : 0
     
     const project: Project = {
       id: uuid(),
       name,
       rootDirectory,
+      order: maxOrder + 1,
       terminals: [],
       createdAt: now,
       updatedAt: now
@@ -84,6 +180,27 @@ export class ConfigStore {
     if (index === -1) return false
 
     config.projects.splice(index, 1)
+    this.saveConfig(config)
+    return true
+  }
+
+  reorderProjects(projectIds: string[], groupId?: string): boolean {
+    const config = this.getConfig()
+    const now = Date.now()
+    
+    // If groupId is provided, only reorder projects in that group
+    // If groupId is undefined, reorder ungrouped projects
+    projectIds.forEach((id, index) => {
+      const project = config.projects.find(p => p.id === id)
+      if (project) {
+        project.order = index
+        if (groupId !== undefined) {
+          project.groupId = groupId || undefined
+        }
+        project.updatedAt = now
+      }
+    })
+    
     this.saveConfig(config)
     return true
   }

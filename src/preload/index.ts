@@ -1,10 +1,23 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC_CHANNELS } from '@shared/ipc'
 import type { TerminalDataBatch, TerminalExitEvent, PtyConfig, WorktreeCreateOptions, WorktreeCreateResult, GitBranch } from '@shared/ipc'
-import type { Project, Terminal, AppConfig, AppSettings } from '@shared/types'
+import type { Project, ProjectGroup, Terminal, AppConfig, AppSettings } from '@shared/types'
 
 // Exposed API to renderer
 const electronAPI = {
+  // Group operations
+  group: {
+    list: (): Promise<ProjectGroup[]> => ipcRenderer.invoke(IPC_CHANNELS.GROUP_LIST),
+    create: (name: string, color?: string): Promise<ProjectGroup> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GROUP_CREATE, name, color),
+    update: (id: string, updates: Partial<ProjectGroup>): Promise<ProjectGroup | undefined> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GROUP_UPDATE, id, updates),
+    delete: (id: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GROUP_DELETE, id),
+    reorder: (groupIds: string[]): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GROUP_REORDER, groupIds)
+  },
+
   // Project operations
   project: {
     list: (): Promise<Project[]> => ipcRenderer.invoke(IPC_CHANNELS.PROJECT_LIST),
@@ -13,7 +26,9 @@ const electronAPI = {
     update: (id: string, updates: Partial<Project>): Promise<Project | undefined> =>
       ipcRenderer.invoke(IPC_CHANNELS.PROJECT_UPDATE, id, updates),
     delete: (id: string): Promise<boolean> =>
-      ipcRenderer.invoke(IPC_CHANNELS.PROJECT_DELETE, id)
+      ipcRenderer.invoke(IPC_CHANNELS.PROJECT_DELETE, id),
+    reorder: (projectIds: string[], groupId?: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PROJECT_REORDER, projectIds, groupId)
   },
 
   // Terminal operations
