@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { Project, Terminal, AppConfig, ShortcutConfig, KeyBinding } from '@shared/types'
-import { DEFAULT_SHORTCUTS } from '@shared/types'
+import { DEFAULT_SHORTCUTS, DEFAULT_SETTINGS } from '@shared/types'
 import type { TerminalDataBatch } from '@shared/ipc'
 
 interface AppState {
@@ -56,10 +56,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   projects: [],
   activeProjectId: null,
   activeTerminalId: null,
-  settings: {
-    defaultShell: 'powershell',
-    theme: 'dark'
-  },
+  settings: DEFAULT_SETTINGS,
   isLoading: true,
   
   // Load config from main process
@@ -301,6 +298,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     set(state => ({
       settings: { ...state.settings, ...settings }
     }))
+    // Persist to main process
+    window.electronAPI?.config.updateSettings(settings)
   },
   
   // Keyboard shortcuts

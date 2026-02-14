@@ -2,6 +2,10 @@ import { useState, useRef, useEffect } from 'react'
 import { useAppStore } from '../../store'
 import type { Project, Terminal } from '@shared/types'
 
+interface SidebarProps {
+  onOpenSettings?: () => void
+}
+
 // Context menu position type
 interface ContextMenuState {
   visible: boolean
@@ -281,7 +285,7 @@ function ProjectItem({
   )
 }
 
-export default function Sidebar() {
+export default function Sidebar({ onOpenSettings }: SidebarProps) {
   const { projects, createProject, createTerminal, updateTerminal, deleteTerminal } = useAppStore()
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set())
   const [dragOver, setDragOver] = useState(false)
@@ -407,8 +411,17 @@ export default function Sidebar() {
       onDrop={handleDrop}
     >
       {/* Header */}
-      <div className="px-4 py-3 border-b border-border-color">
+      <div className="px-4 py-3 border-b border-border-color flex items-center justify-between">
         <h1 className="font-bold text-lg">Terminal Orchestrator</h1>
+        {onOpenSettings && (
+          <button
+            onClick={onOpenSettings}
+            className="flex items-center px-2 py-1 bg-[#3c3c3c] hover:bg-[#4ec9b0] rounded text-white hover:text-[#1e1e1e] transition-colors text-sm font-medium border border-[#4ec9b0]"
+            title="Open Settings"
+          >
+            <span>⚙️</span>
+          </button>
+        )}
       </div>
       
       {/* Search bar */}

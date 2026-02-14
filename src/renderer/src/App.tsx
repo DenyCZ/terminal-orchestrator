@@ -330,7 +330,7 @@ function App() {
       {/* Main layout */}
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <Sidebar />
+        <Sidebar onOpenSettings={handleOpenSettings} />
         
         {/* Main content area */}
         <div className="flex-1 flex flex-col overflow-hidden">

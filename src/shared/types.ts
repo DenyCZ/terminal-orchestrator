@@ -2,6 +2,15 @@ export type ShellType = 'cmd' | 'powershell';
 
 export type TerminalStatus = 'idle' | 'running' | 'stopped' | 'completed' | 'error';
 
+// Web UI Settings for mobile access
+export interface WebUISettings {
+  enabled: boolean;
+  port: number;
+  pin: string;
+  allowRemote: boolean;
+  showQRCode: boolean;
+}
+
 // Keyboard shortcut types
 export interface KeyBinding {
   key: string;
@@ -64,6 +73,7 @@ export interface AppSettings {
   defaultShell: ShellType;
   theme: 'dark' | 'light';
   keyboardShortcuts?: ShortcutConfig;
+  webUI?: WebUISettings;
 }
 
 // All available shortcuts with their definitions
@@ -202,7 +212,14 @@ export interface AppConfig {
 export const DEFAULT_SETTINGS: AppSettings = {
   defaultShell: 'powershell',
   theme: 'dark',
-  keyboardShortcuts: DEFAULT_SHORTCUTS
+  keyboardShortcuts: DEFAULT_SHORTCUTS,
+  webUI: {
+    enabled: false,
+    port: 3000,
+    pin: '',
+    allowRemote: false,
+    showQRCode: true
+  }
 };
 
 export const DEFAULT_CONFIG: AppConfig = {

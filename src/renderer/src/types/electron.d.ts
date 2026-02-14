@@ -1,5 +1,5 @@
 import type { Project, Terminal, AppConfig, AppSettings } from '@shared/types'
-import type { TerminalDataBatch, TerminalExitEvent, WorktreeCreateOptions, WorktreeCreateResult, GitBranch } from '@shared/ipc'
+import type { TerminalDataBatch, TerminalExitEvent, WorktreeCreateOptions, WorktreeCreateResult, GitBranch, WebUIStatus } from '@shared/ipc'
 
 export interface ElectronAPI {
   project: {
@@ -46,6 +46,13 @@ export interface ElectronAPI {
   
   shell: {
     openFolder: (folderPath: string) => Promise<string>
+  }
+  
+  webui: {
+    start: () => Promise<{ success: boolean; error?: string }>
+    stop: () => Promise<{ success: boolean }>
+    getStatus: () => Promise<WebUIStatus>
+    regeneratePin: () => Promise<{ pin: string }>
   }
   
   init: () => void
