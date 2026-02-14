@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC_CHANNELS } from '@shared/ipc'
-import type { TerminalDataBatch, TerminalExitEvent, PtyConfig, WorktreeCreateOptions, WorktreeCreateResult, GitBranch, WebUIStatus } from '@shared/ipc'
+import type { TerminalDataBatch, TerminalExitEvent, PtyConfig, WorktreeCreateOptions, WorktreeCreateResult, GitBranch, WebUIStatus, FileEntry, ReadDirOptions } from '@shared/ipc'
 import type { Project, ProjectGroup, Terminal, AppConfig, AppSettings, DetectedShell, ShellType } from '@shared/types'
 
 // Exposed API to renderer
@@ -116,7 +116,15 @@ const electronAPI = {
     openFolder: (folderPath: string): Promise<string> =>
       ipcRenderer.invoke(IPC_CHANNELS.SHELL_OPEN_FOLDER, folderPath),
     listAvailable: (): Promise<DetectedShell[]> =>
-      ipcRenderer.invoke(IPC_CHANNELS.SHELL_LIST)
+      ipcRenderer.invoke(IPC_CHANNELS.SHELL_LIST),
+    openInVSCode: (filePath: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SHELL_OPEN_VSCODE, filePath)
+  },
+
+  // File system operations
+  fs: {
+    readDir: (options: ReadDirOptions): Promise<FileEntry[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.FS_READ_DIR, options)
   },
 
   // Web UI operations

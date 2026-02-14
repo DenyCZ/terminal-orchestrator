@@ -48,6 +48,10 @@ export const IPC_CHANNELS = {
   // Shell operations
   SHELL_OPEN_FOLDER: 'shell:open-folder',
   SHELL_LIST: 'shell:list',
+  SHELL_OPEN_VSCODE: 'shell:open-vscode',
+
+  // File system operations
+  FS_READ_DIR: 'fs:read-dir',
    
   // Web UI operations
   WEBUI_START: 'webui:start',
@@ -120,5 +124,23 @@ export interface WebUIStatus {
   url?: string;
   addresses: string[];
   qrCode?: string;
+}
+
+// File system entry
+export interface FileEntry {
+  name: string;
+  path: string;
+  isDirectory: boolean;
+  isFile: boolean;
+  extension?: string;
+  size?: number;
+  modifiedAt?: number;
+}
+
+// Directory read options
+export interface ReadDirOptions {
+  path: string;
+  recursive?: boolean;
+  maxDepth?: number;
 }
 

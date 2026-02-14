@@ -1,9 +1,11 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { useAppStore } from '../../store'
 import type { Terminal as TerminalType } from '@shared/types'
+import type { FileEntry } from '@shared/ipc'
+import FileTree from '../FileTree'
 import '@xterm/xterm/css/xterm.css'
 
 interface TerminalViewProps {
@@ -13,6 +15,23 @@ interface TerminalViewProps {
   onNextTerminal?: () => void
   onPrevTerminal?: () => void
   onNewTerminal?: () => void
+}
+
+// File icon component for inline use
+function FileIcon({ entry }: { entry: FileEntry }) {
+  if (entry.isDirectory) {
+    return <span className="text-yellow-400">📁</span>
+  }
+  
+  const ext = entry.extension?.toLowerCase() || ''
+  
+  const iconMap: Record<string, string> = {
+    '.ts': '📘', '.tsx': '📘', '.js': '📙', '.jsx': '📙',
+    '.json': '📋', '.md': '📝', '.css': '🎨', '.html': '🌐',
+    '.py': '🐍', '.rs': '🦀', '.go': '🐹', '.java': '☕',
+  }
+  
+  return <span>{iconMap[ext] || '📄'}</span>
 }
 
 export default function TerminalView({
@@ -28,6 +47,12 @@ export default function TerminalView({
   const fitAddonRef = useRef<FitAddon | null>(null)
   const hasStartedRef = useRef(false)
   const { startTerminal, stopTerminal, restartTerminal } = useAppStore()
+  
+  // File explorer state
+  const [showFileExplorer, setShowFileExplorer] = useState(false)
+  const [explorerWidth, setExplorerWidth] = useState(250)
+  const [isResizing, setIsResizing] = useState(false)
+  const [selectedFile, setSelectedFile] = useState<FileEntry | null>(null)
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -36,6 +61,7 @@ export default function TerminalView({
 
     const term = new Terminal({
       cursorBlink: true,
+      cursorStyle: 'block',
       fontSize: 14,
       fontFamily: '"Cascadia Code", "Fira Code", "Consolas", monospace',
       theme: {
@@ -44,6 +70,7 @@ export default function TerminalView({
         cursor: '#d4d4d4',
         cursorAccent: '#1e1e1e',
         selectionBackground: '#264f78',
+        selectionForeground: '#ffffff',
         black: '#000000',
         red: '#cd3131',
         green: '#0dbc79',
@@ -61,26 +88,41 @@ export default function TerminalView({
         brightCyan: '#29b8db',
         brightWhite: '#e5e5e5'
       },
-      allowProposedApi: true,
-      scrollback: 5000
+      scrollback: 5000,
+      convertEol: true,
+      smoothScrollDuration: 125
     })
 
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
     term.loadAddon(new WebLinksAddon())
 
+    // Open terminal before fitting
     term.open(containerRef.current)
-    fitAddon.fit()
 
-    terminalRef.current = term
-    fitAddonRef.current = fitAddon
+    // Use requestAnimationFrame for smoother initialization
+    requestAnimationFrame(() => {
+      fitAddon.fit()
+      terminalRef.current = term
+      fitAddonRef.current = fitAddon
 
-    const handleResize = () => {
-      if (fitAddonRef.current && terminalRef.current) {
-        fitAddonRef.current.fit()
-        const { cols, rows } = terminalRef.current
-        window.electronAPI?.terminal.resize(terminal.id, cols, rows)
+      if (terminal.status === 'idle' && !hasStartedRef.current) {
+        hasStartedRef.current = true
+        startTerminal(projectId, terminal.id)
       }
+    })
+
+    // Debounced resize handler
+    let resizeTimeout: ReturnType<typeof setTimeout>
+    const handleResize = () => {
+      clearTimeout(resizeTimeout)
+      resizeTimeout = setTimeout(() => {
+        if (fitAddonRef.current && terminalRef.current) {
+          fitAddonRef.current.fit()
+          const { cols, rows } = terminalRef.current
+          window.electronAPI?.terminal.resize(terminal.id, cols, rows)
+        }
+      }, 100) // 100ms debounce
     }
 
     const resizeObserver = new ResizeObserver(handleResize)
@@ -124,18 +166,17 @@ export default function TerminalView({
       window.electronAPI?.terminal.write(terminal.id, data)
     })
 
+    // Handle output with auto-scroll to bottom
     const removeDataListener = window.electronAPI?.terminal.onData((data) => {
       if (data.terminalId === terminal.id && terminalRef.current) {
         terminalRef.current.write(data.data)
+        // Auto-scroll to bottom on new output for native terminal feel
+        terminalRef.current.scrollToBottom()
       }
     })
 
-    if (terminal.status === 'idle' && !hasStartedRef.current) {
-      hasStartedRef.current = true
-      startTerminal(projectId, terminal.id)
-    }
-
     return () => {
+      clearTimeout(resizeTimeout)
       resizeObserver.disconnect()
       removeDataListener?.()
       term.dispose()
@@ -144,13 +185,51 @@ export default function TerminalView({
     }
   }, [terminal.id, terminal.status, startTerminal, onOpenCommandPalette, onNextTerminal, onPrevTerminal, onNewTerminal])
 
+  // Handle resize when file explorer visibility/width changes
   useEffect(() => {
     if (terminalRef.current && fitAddonRef.current) {
-      setTimeout(() => {
+      // Use requestAnimationFrame for smoother resize
+      requestAnimationFrame(() => {
         fitAddonRef.current?.fit()
-      }, 0)
+        // Notify PTY of resize
+        const { cols, rows } = terminalRef.current!
+        window.electronAPI?.terminal.resize(terminal.id, cols, rows)
+      })
     }
-  }, [terminal.id])
+  }, [terminal.id, showFileExplorer, explorerWidth])
+  
+  // Handle resize drag
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsResizing(true)
+    
+    const handleMouseMove = (e: MouseEvent) => {
+      const newWidth = e.clientX
+      if (newWidth >= 150 && newWidth <= 500) {
+        setExplorerWidth(newWidth)
+      }
+    }
+    
+    const handleMouseUp = () => {
+      setIsResizing(false)
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+    
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+  }, [])
+  
+  // Handle file click
+  const handleFileClick = useCallback((file: FileEntry) => {
+    setSelectedFile(file)
+  }, [])
+  
+  // Handle folder double-click (open in terminal)
+  const handleFolderDoubleClick = useCallback((folder: FileEntry) => {
+    // Could implement opening folder in new terminal or similar
+    console.log('Folder clicked:', folder.path)
+  }, [])
 
   return (
     <div className="h-full w-full flex flex-col bg-terminal-bg">
@@ -172,6 +251,19 @@ export default function TerminalView({
         </div>
         
         <div className="flex items-center gap-2">
+          {/* File Explorer toggle button */}
+          <button
+            onClick={() => setShowFileExplorer(!showFileExplorer)}
+            className={`px-2 py-1 text-sm rounded transition-colors ${
+              showFileExplorer 
+                ? 'bg-[#4ec9b0] text-[#1e1e1e]' 
+                : 'bg-gray-600 hover:bg-gray-500'
+            }`}
+            title={showFileExplorer ? 'Hide File Explorer' : 'Show File Explorer'}
+          >
+            📂
+          </button>
+          
           <button
             onClick={() => window.electronAPI?.shell.openFolder(terminal.workingDirectory)}
             className="px-2 py-1 text-sm bg-gray-600 hover:bg-gray-500 rounded transition-colors"
@@ -179,6 +271,7 @@ export default function TerminalView({
           >
             📁
           </button>
+          
           {terminal.status === 'running' ? (
             <button
               onClick={() => stopTerminal(terminal.id)}
@@ -203,11 +296,61 @@ export default function TerminalView({
         </div>
       </div>
       
-      {/* Terminal container */}
-      <div 
-        ref={containerRef}
-        className="flex-1 h-0"
-      />
+      {/* Main content area with file explorer */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* File Explorer sidebar */}
+        {showFileExplorer && (
+          <>
+            <div 
+              className="flex-shrink-0 border-r border-border-color"
+              style={{ width: explorerWidth }}
+            >
+              <FileTree 
+                rootPath={terminal.workingDirectory}
+                onFileClick={handleFileClick}
+                onFolderClick={handleFolderDoubleClick}
+              />
+            </div>
+            
+            {/* Resize handle */}
+            <div
+              className={`w-1 bg-border-color hover:bg-[#4ec9b0] cursor-col-resize flex-shrink-0 transition-colors ${
+                isResizing ? 'bg-[#4ec9b0]' : ''
+              }`}
+              onMouseDown={handleMouseDown}
+            />
+          </>
+        )}
+        
+        {/* Terminal container */}
+        <div className="flex-1 h-full terminal-wrapper">
+          <div 
+            ref={containerRef}
+            className="terminal-container"
+          />
+        </div>
+      </div>
+      
+      {/* Selected file info (optional footer) */}
+      {showFileExplorer && selectedFile && (
+        <div className="px-3 py-1 bg-sidebar-bg border-t border-border-color text-xs text-gray-400 flex items-center gap-2">
+          <FileIcon entry={selectedFile} />
+          <span className="truncate">{selectedFile.name}</span>
+          {selectedFile.size !== undefined && (
+            <span className="text-gray-500">
+              ({(selectedFile.size / 1024).toFixed(1)} KB)
+            </span>
+          )}
+          <span className="flex-1" />
+          <button
+            onClick={() => window.electronAPI?.shell.openInVSCode(selectedFile.path)}
+            className="text-[#4ec9b0] hover:text-[#4ec9b0]/80 hover:underline transition-colors"
+            title="Open in VSCode"
+          >
+            Open in VSCode
+          </button>
+        </div>
+      )}
     </div>
   )
 }

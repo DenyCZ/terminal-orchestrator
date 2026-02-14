@@ -1,5 +1,5 @@
 import type { Project, ProjectGroup, Terminal, AppConfig, AppSettings, DetectedShell, ShellType } from '@shared/types'
-import type { TerminalDataBatch, TerminalExitEvent, WorktreeCreateOptions, WorktreeCreateResult, GitBranch, WebUIStatus } from '@shared/ipc'
+import type { TerminalDataBatch, TerminalExitEvent, WorktreeCreateOptions, WorktreeCreateResult, GitBranch, WebUIStatus, FileEntry, ReadDirOptions } from '@shared/ipc'
 
 export interface ElectronAPI {
   group: {
@@ -56,6 +56,11 @@ export interface ElectronAPI {
   shell: {
     openFolder: (folderPath: string) => Promise<string>
     listAvailable: () => Promise<DetectedShell[]>
+    openInVSCode: (filePath: string) => Promise<{ success: boolean; error?: string }>
+  }
+
+  fs: {
+    readDir: (options: ReadDirOptions) => Promise<FileEntry[]>
   }
   
   webui: {

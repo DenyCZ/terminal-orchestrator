@@ -4,9 +4,13 @@ import { PtyManager } from '../pty'
 import { IPC_CHANNELS } from '@shared/ipc'
 import type { PtyConfig, TerminalDataBatch, TerminalExitEvent } from '@shared/ipc'
 import type { Terminal, Project, ProjectGroup, WebUISettings, AppSettings, DetectedShell, ShellType } from '@shared/types'
+import type { FileEntry, ReadDirOptions } from '@shared/ipc'
 import * as git from '../git'
 import { WebUIManager } from '../web-ui-manager'
 import { detectShells } from '../shell-detector'
+import * as fs from 'fs'
+import * as path from 'path'
+import { spawn } from 'child_process'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -266,6 +270,84 @@ export function setupIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.SHELL_LIST, (): DetectedShell[] => {
     return detectShells()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SHELL_OPEN_VSCODE, async (_, filePath: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      // Try 'code' first (standard VSCode command)
+      const child = spawn('code', [filePath], { 
+        detached: true,
+        stdio: 'ignore',
+        shell: true
+      })
+      
+      child.on('error', (err) => {
+        console.error('Failed to open VSCode:', err)
+        // Try fallback: open with shell
+        shell.openExternal(`vscode://file/${filePath}`)
+      })
+      
+      child.unref()
+      return { success: true }
+    } catch (error) {
+      console.error('Failed to open VSCode:', error)
+      // Fallback: try using vscode:// protocol
+      try {
+        await shell.openExternal(`vscode://file/${filePath}`)
+        return { success: true }
+      } catch (fallbackError) {
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Failed to open VSCode' 
+        }
+      }
+    }
+  })
+
+  // =====================
+  // File System Operations
+  // =====================
+
+  ipcMain.handle(IPC_CHANNELS.FS_READ_DIR, async (_, options: ReadDirOptions): Promise<FileEntry[]> => {
+    const { path: dirPath } = options
+    
+    try {
+      const entries = await fs.promises.readdir(dirPath, { withFileTypes: true })
+      
+      const fileEntries: FileEntry[] = await Promise.all(
+        entries
+          .filter(entry => !entry.name.startsWith('.')) // Hide hidden files
+          .map(async (entry): Promise<FileEntry> => {
+            const fullPath = path.join(dirPath, entry.name)
+            const stats = entry.isSymbolicLink() 
+              ? await fs.promises.lstat(fullPath).catch(() => null)
+              : await fs.promises.stat(fullPath).catch(() => null)
+            
+            const isDirectory = entry.isDirectory() || (stats?.isDirectory() ?? false)
+            
+            return {
+              name: entry.name,
+              path: fullPath,
+              isDirectory,
+              isFile: !isDirectory,
+              extension: isDirectory ? undefined : path.extname(entry.name),
+              size: stats?.size,
+              modifiedAt: stats?.mtimeMs
+            }
+          })
+      )
+      
+      // Sort: directories first, then files alphabetically
+      return fileEntries.sort((a, b) => {
+        if (a.isDirectory !== b.isDirectory) {
+          return a.isDirectory ? -1 : 1
+        }
+        return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+      })
+    } catch (error) {
+      console.error(`Failed to read directory ${dirPath}:`, error)
+      return []
+    }
   })
 
   // =====================
