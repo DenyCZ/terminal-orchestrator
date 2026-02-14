@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 import type { Project, ProjectGroup, Terminal, AppConfig, ShortcutConfig, KeyBinding } from '@shared/types'
 import { DEFAULT_SHORTCUTS } from '@shared/types'
-import type { TerminalDataBatch } from '@shared/ipc'
 
 interface AppState {
   // Data
@@ -84,13 +83,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         activeProjectId: config.projects[0]?.id || null,
         activeTerminalId: config.projects[0]?.terminals[0]?.id || null
       })
-      
-      // Setup terminal event listeners
-      window.electronAPI.terminal.onData((_data: TerminalDataBatch) => {
-        // Terminal data is handled by TerminalView component
-        // This is just for potential future use
-      })
-      
+
       window.electronAPI.terminal.onExit((event) => {
         const { projects } = get()
         for (const project of projects) {

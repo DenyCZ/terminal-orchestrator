@@ -127,19 +127,24 @@ class ChildProcessPty implements IPty {
   }
 }
 
-// PTY factory - tries node-pty first, falls back to child_process
+interface PtySpawnOptions {
+  name: string
+  cols: number
+  rows: number
+  cwd: string
+  env: Record<string, string>
+  encoding?: string
+}
+
 async function createPty(
   shell: string,
   args: string[],
   options: { cols: number; rows: number; cwd: string; env: Record<string, string> }
 ): Promise<IPty> {
   try {
-    // Try to load node-pty
     const pty = await import('node-pty')
 
-    // Build options - encoding not supported on Windows
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const ptyOptions: any = {
+    const ptyOptions: PtySpawnOptions = {
       name: 'xterm-256color',
       cols: options.cols,
       rows: options.rows,
@@ -147,7 +152,6 @@ async function createPty(
       env: options.env
     }
 
-    // encoding option is not supported on Windows
     if (process.platform !== 'win32') {
       ptyOptions.encoding = 'utf8'
     }
@@ -155,14 +159,13 @@ async function createPty(
     return pty.spawn(shell, args, ptyOptions)
   } catch (error) {
     console.warn('node-pty not available, falling back to child_process:', error)
-    
-    // Fallback to child_process
+
     const proc = spawn(shell, args, {
       cwd: options.cwd,
       env: options.env,
       stdio: ['pipe', 'pipe', 'pipe']
     })
-    
+
     return new ChildProcessPty(proc)
   }
 }

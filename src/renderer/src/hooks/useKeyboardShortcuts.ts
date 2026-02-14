@@ -1,13 +1,6 @@
-/**
- * Global keyboard shortcuts hook for the keyboard-first UX.
- * 
- * Shortcuts are configurable via the Settings modal.
- * Reads current shortcut configuration from the store.
- */
-
-import { useEffect, useCallback } from 'react';
-import { useAppStore } from '../store';
-import { DEFAULT_SHORTCUTS, type KeyBinding } from '@shared/types';
+import { useEffect, useCallback } from 'react'
+import { useAppStore } from '../store'
+import { DEFAULT_SHORTCUTS, type KeyBinding } from '@shared/types'
 
 export interface KeyboardShortcut {
   key: string;
@@ -236,42 +229,5 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
       window.addEventListener('keydown', handleKeyDown);
       return () => window.removeEventListener('keydown', handleKeyDown);
     }
-  }, [handleKeyDown, enabled]);
-
-  // Helper to format a binding for display
-  const formatBinding = (binding: KeyBinding): string[] => {
-    const parts: string[] = [];
-    if (binding.ctrl) parts.push('Ctrl');
-    if (binding.shift) parts.push('Shift');
-    if (binding.alt) parts.push('Alt');
-    if (binding.meta) parts.push('Meta');
-    
-    let key = binding.key;
-    if (key === ' ') key = 'Space';
-    else if (key === 'Escape') key = 'Esc';
-    else if (key.length === 1) key = key.toUpperCase();
-    
-    parts.push(key);
-    return parts;
-  };
-
-  return {
-    // Expose shortcuts info for help display (dynamically from config)
-    shortcuts: [
-      { keys: formatBinding(shortcuts.openCommandPalette), description: 'Open command palette' },
-      { keys: formatBinding(shortcuts.nextTerminal), description: 'Next terminal' },
-      { keys: formatBinding(shortcuts.prevTerminal), description: 'Previous terminal' },
-      { keys: formatBinding(shortcuts.runTerminal), description: 'Run terminal' },
-      { keys: formatBinding(shortcuts.restartTerminal), description: 'Restart terminal' },
-      { keys: formatBinding(shortcuts.killTerminal), description: 'Kill terminal' },
-      { keys: formatBinding(shortcuts.newWorktree), description: 'New git worktree' },
-      { keys: formatBinding(shortcuts.switchProject), description: 'Switch project' },
-      { keys: formatBinding(shortcuts.switchTerminal), description: 'Switch terminal' },
-      { keys: formatBinding(shortcuts.newTerminal), description: 'New terminal' },
-      { keys: formatBinding(shortcuts.newProject), description: 'New project' },
-      { keys: formatBinding(shortcuts.focusTerminal), description: 'Focus terminal' },
-      { keys: formatBinding(shortcuts.openHelp), description: 'Show help' },
-      { keys: formatBinding(shortcuts.closeCommandPalette), description: 'Close command palette' },
-    ]
-  };
+  }, [handleKeyDown, enabled])
 }

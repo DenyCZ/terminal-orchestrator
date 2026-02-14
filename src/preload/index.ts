@@ -121,8 +121,12 @@ const electronAPI = {
   init: (): void => ipcRenderer.send('set-main-window')
 }
 
-// Use `contextBridge` APIs to expose Electron APIs to renderer
-// only if context isolation is enabled
+declare global {
+  interface Window {
+    electronAPI: typeof electronAPI
+  }
+}
+
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electronAPI', electronAPI)
@@ -130,6 +134,5 @@ if (process.contextIsolated) {
     console.error('Failed to expose electronAPI:', error)
   }
 } else {
-  // @ts-ignore
   window.electronAPI = electronAPI
 }

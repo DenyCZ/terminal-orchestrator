@@ -26,17 +26,14 @@ export default function TerminalView({
   const containerRef = useRef<HTMLDivElement>(null)
   const terminalRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
-  const hasStartedRef = useRef(false) // Track if we've already attempted to start this terminal
+  const hasStartedRef = useRef(false)
   const { startTerminal, stopTerminal, restartTerminal } = useAppStore()
 
-  // Initialize terminal
   useEffect(() => {
     if (!containerRef.current) return
-    
-    // Reset start tracking when terminal changes
+
     hasStartedRef.current = false
 
-    // Create terminal instance
     const term = new Terminal({
       cursorBlink: true,
       fontSize: 14,
@@ -68,19 +65,16 @@ export default function TerminalView({
       scrollback: 5000
     })
 
-    // Load addons
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
     term.loadAddon(new WebLinksAddon())
 
-    // Open terminal
     term.open(containerRef.current)
     fitAddon.fit()
 
     terminalRef.current = term
     fitAddonRef.current = fitAddon
 
-    // Handle resize
     const handleResize = () => {
       if (fitAddonRef.current && terminalRef.current) {
         fitAddonRef.current.fit()
@@ -92,11 +86,9 @@ export default function TerminalView({
     const resizeObserver = new ResizeObserver(handleResize)
     resizeObserver.observe(containerRef.current)
 
-    // Handle keyboard shortcuts BEFORE they're sent to the terminal
     term.onKey(({ domEvent }) => {
       const { key, ctrlKey, shiftKey } = domEvent
 
-      // Ctrl+Space - Open command palette
       if (ctrlKey && key === ' ') {
         domEvent.preventDefault()
         domEvent.stopPropagation()
@@ -104,7 +96,6 @@ export default function TerminalView({
         return false
       }
 
-      // Ctrl+Tab - Next terminal
       if (ctrlKey && key === 'Tab' && !shiftKey) {
         domEvent.preventDefault()
         domEvent.stopPropagation()
@@ -112,7 +103,6 @@ export default function TerminalView({
         return false
       }
 
-      // Ctrl+Shift+Tab - Previous terminal
       if (ctrlKey && key === 'Tab' && shiftKey) {
         domEvent.preventDefault()
         domEvent.stopPropagation()
@@ -120,7 +110,6 @@ export default function TerminalView({
         return false
       }
 
-      // Ctrl+N - New terminal
       if (ctrlKey && key === 'n' && !shiftKey) {
         domEvent.preventDefault()
         domEvent.stopPropagation()
@@ -128,26 +117,19 @@ export default function TerminalView({
         return false
       }
 
-      // Note: Help shortcut (?) is handled at the App level via useKeyboardShortcuts
-      // Don't intercept it here to allow typing / and ? in the terminal
-
-      // Let other keys through to the terminal
       return true
     })
 
-    // Handle user input (for non-shortcut keys)
     term.onData((data) => {
       window.electronAPI?.terminal.write(terminal.id, data)
     })
 
-    // Setup data listener for this terminal
     const removeDataListener = window.electronAPI?.terminal.onData((data) => {
       if (data.terminalId === terminal.id && terminalRef.current) {
         terminalRef.current.write(data.data)
       }
     })
 
-    // Auto-start terminal if idle (only once per terminal)
     if (terminal.status === 'idle' && !hasStartedRef.current) {
       hasStartedRef.current = true
       startTerminal(projectId, terminal.id)
@@ -160,22 +142,8 @@ export default function TerminalView({
       terminalRef.current = null
       fitAddonRef.current = null
     }
-  }, [terminal.id, terminal.status, projectId, startTerminal, onOpenCommandPalette, onNextTerminal, onPrevTerminal, onNewTerminal]) // Include all dependencies
+  }, [terminal.id, terminal.status, startTerminal, onOpenCommandPalette, onNextTerminal, onPrevTerminal, onNewTerminal])
 
-  // Update PTY when terminal resizes
-  useEffect(() => {
-    if (!terminalRef.current) return
-
-    const disposable = terminalRef.current.onResize(({ cols, rows }) => {
-      if (terminal.status === 'running') {
-        window.electronAPI?.terminal.resize(terminal.id, cols, rows)
-      }
-    })
-
-    return () => disposable.dispose()
-  }, [terminal.id, terminal.status])
-
-  // Clear and refit when switching terminals
   useEffect(() => {
     if (terminalRef.current && fitAddonRef.current) {
       setTimeout(() => {

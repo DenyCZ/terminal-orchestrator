@@ -1,16 +1,16 @@
-import { useEffect, useRef, useMemo } from 'react';
-import { useAppStore } from '../../store';
-import { DEFAULT_SHORTCUTS, type KeyBinding } from '@shared/types';
+import { useEffect, useRef, useMemo } from 'react'
+import { useAppStore } from '../../store'
+import { DEFAULT_SHORTCUTS } from '@shared/types'
+import { formatBinding } from '../../utils/keybinds'
 
 interface KeybindGroup {
-  title: string;
+  title: string
   bindings: Array<{
-    keys: string[];
-    description: string;
-  }>;
+    keys: string[]
+    description: string
+  }>
 }
 
-// Static command palette commands (these don't change)
 const COMMAND_PALETTE_COMMANDS: KeybindGroup = {
   title: 'Command Palette Commands',
   bindings: [
@@ -24,26 +24,7 @@ const COMMAND_PALETTE_COMMANDS: KeybindGroup = {
     { keys: ['stop-all'], description: 'Stop all terminals' },
     { keys: ['settings'], description: 'Open settings' },
   ]
-};
-
-// Helper to format a binding for display
-const formatBinding = (binding: KeyBinding): string[] => {
-  const parts: string[] = [];
-  if (binding.ctrl) parts.push('Ctrl');
-  if (binding.shift) parts.push('Shift');
-  if (binding.alt) parts.push('Alt');
-  if (binding.meta) parts.push('Meta');
-  
-  let key = binding.key;
-  if (key === ' ') key = 'Space';
-  else if (key === 'Escape') key = 'Esc';
-  else if (key === 'ArrowUp') key = '↑';
-  else if (key === 'ArrowDown') key = '↓';
-  else if (key.length === 1) key = key.toUpperCase();
-  
-  parts.push(key);
-  return parts;
-};
+}
 
 interface HelpModalProps {
   isOpen: boolean;
@@ -191,8 +172,5 @@ export default function HelpModal({ isOpen, onClose, onOpenSettings }: HelpModal
         </div>
       </div>
     </div>
-  );
+  )
 }
-
-// Helper function for formatting (exported for potential reuse)
-export { formatBinding };

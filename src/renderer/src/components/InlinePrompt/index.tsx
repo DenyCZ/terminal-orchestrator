@@ -11,17 +11,13 @@ export interface PromptField {
 }
 
 interface InlinePromptProps {
-  isOpen: boolean;
-  title: string;
-  fields: PromptField[];
-  onSubmit: (values: Record<string, string>) => void;
-  onCancel: () => void;
+  isOpen: boolean
+  title: string
+  fields: PromptField[]
+  onSubmit: (values: Record<string, string>) => void
+  onCancel: () => void
 }
 
-/**
- * InlinePrompt - A keyboard-only inline prompt for creating/editing entities.
- * No modals, no mouse required. All fields are navigable via keyboard.
- */
 export default function InlinePrompt({
   isOpen,
   title,
@@ -32,9 +28,8 @@ export default function InlinePrompt({
   const [values, setValues] = useState<Record<string, string>>({});
   const [currentFieldIndex, setCurrentFieldIndex] = useState(0);
   const [validationErrors, setValidationErrors] = useState<Set<string>>(new Set());
-  const inputRefs = useRef<(HTMLInputElement | HTMLSelectElement | null)[]>([]);
+  const inputRefs = useRef<(HTMLInputElement | HTMLSelectElement | null)[]>([])
 
-  // Initialize values when opening
   useEffect(() => {
     if (isOpen) {
       const initialValues: Record<string, string> = {};
@@ -48,9 +43,8 @@ export default function InlinePrompt({
       // Focus first input after render
       setTimeout(() => inputRefs.current[0]?.focus(), 50);
     }
-  }, [isOpen, fields]);
+  }, [isOpen, fields])
 
-  // Focus current field
   useEffect(() => {
     if (isOpen && inputRefs.current[currentFieldIndex]) {
       inputRefs.current[currentFieldIndex]?.focus();

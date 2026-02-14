@@ -28,37 +28,23 @@ function App() {
     settings
   } = useAppStore()
 
-  // Command palette state
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
   const [commandPaletteQuery, setCommandPaletteQuery] = useState('')
-  
-  // Inline prompt state
   const [promptMode, setPromptMode] = useState<PromptMode>('none')
-  
-  // Help modal state
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false)
-  
-  // Settings modal state
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
-  
-  // Track if we've checked for first-time startup
   const hasCheckedStartup = useRef(false)
 
-  // Load config on mount
   useEffect(() => {
     loadConfig()
   }, [loadConfig])
 
-  // Zero-config startup experience: auto-open command palette on first load
-  // when there are no projects, or when no terminal is selected
   useEffect(() => {
     if (isLoading || hasCheckedStartup.current) return
     hasCheckedStartup.current = true
-    
-    // Small delay to ensure UI is ready
+
     const timer = setTimeout(() => {
       if (projects.length === 0) {
-        // First-time user - show command palette with helpful suggestions
         setIsCommandPaletteOpen(true)
       }
     }, 100)
@@ -66,11 +52,9 @@ function App() {
     return () => clearTimeout(timer)
   }, [isLoading, projects.length])
 
-  // Get active entities
   const activeProject = projects.find(p => p.id === activeProjectId)
   const activeTerminal = activeProject?.terminals.find(t => t.id === activeTerminalId)
 
-  // Terminal navigation helpers
   const getActiveProjectTerminals = useCallback(() => {
     return activeProject?.terminals || []
   }, [activeProject])
@@ -93,14 +77,11 @@ function App() {
     setActiveTerminal(terminals[prevIndex].id)
   }, [getActiveProjectTerminals, activeTerminalId, setActiveTerminal])
 
-  // Focus terminal - quick jump to terminal input
   const handleFocusTerminal = useCallback(() => {
-    // Focus the xterm textarea
     const xtermTextarea = document.querySelector('.xterm-helper-textarea') as HTMLTextAreaElement
     if (xtermTextarea) {
       xtermTextarea.focus()
     } else {
-      // Fallback: click on the terminal container
       const terminalContainer = document.querySelector('.xterm')
       if (terminalContainer) {
         (terminalContainer as HTMLElement).click()
@@ -108,7 +89,6 @@ function App() {
     }
   }, [])
 
-  // Keyboard shortcut handlers
   const handleOpenCommandPalette = useCallback(() => {
     setCommandPaletteQuery('')
     setIsCommandPaletteOpen(true)
@@ -146,10 +126,7 @@ function App() {
 
   const handleRunTerminal = useCallback(async () => {
     if (activeProject && activeTerminal) {
-      if (activeTerminal.status === 'running') {
-        // Already running, do nothing
-        return
-      }
+      if (activeTerminal.status === 'running') return
       await startTerminal(activeProject.id, activeTerminal.id)
     }
   }, [activeProject, activeTerminal, startTerminal])
@@ -171,11 +148,8 @@ function App() {
   }, [activeProject, activeTerminal, stopTerminal, deleteTerminal])
 
   const handleClearTerminal = useCallback(() => {
-    // This would clear the terminal - handled by xterm
-    // For now, we'll just trigger a visual clear
     const terminalContainer = document.querySelector('.xterm')
     if (terminalContainer) {
-      // Send clear command to terminal
       window.electronAPI?.terminal.write(activeTerminalId || '', '\x1b[2J\x1b[H')
     }
   }, [activeTerminalId])
@@ -196,7 +170,6 @@ function App() {
     setIsSettingsModalOpen(false)
   }, [])
 
-  // Setup keyboard shortcuts
   useKeyboardShortcuts({
     onOpenCommandPalette: handleOpenCommandPalette,
     onCloseCommandPalette: handleCloseCommandPalette,
@@ -214,10 +187,9 @@ function App() {
     onFocusTerminal: handleFocusTerminal,
     onOpenHelp: handleOpenHelp,
     isCommandPaletteOpen: isCommandPaletteOpen,
-    enabled: promptMode === 'none' && !isHelpModalOpen && !isSettingsModalOpen // Disable shortcuts when prompt or modal is open
+    enabled: promptMode === 'none' && !isHelpModalOpen && !isSettingsModalOpen
   })
 
-  // Inline prompt handlers
   const handlePromptSubmit = useCallback(async (values: Record<string, string>) => {
     if (promptMode === 'new-terminal') {
       const projectId = activeProjectId || projects[0]?.id
@@ -233,7 +205,6 @@ function App() {
       }
     } else if (promptMode === 'new-project') {
       const project = await createProject(values.name || 'New Project', values.path)
-      // Create initial terminal
       if (project && values.path) {
         await createTerminal(
           project.id,
@@ -247,16 +218,14 @@ function App() {
       const sourcePath = activeProject?.rootDirectory || values.sourcePath || ''
       
       if (projectId && sourcePath) {
-        // Create the worktree
         const result = await window.electronAPI.git.createWorktree({
           sourcePath,
           branch: values.branch,
           createBranch: values.createNewBranch === 'true',
           basePath: values.basePath || undefined
         })
-        
+
         if (result.success && result.worktreePath) {
-          // Create a terminal in the new worktree
           await createTerminal(
             projectId,
             values.terminalName || `Worktree: ${values.branch}`,
@@ -264,7 +233,6 @@ function App() {
             result.worktreePath
           )
         } else {
-          // Show error
           console.error('Failed to create worktree:', result.error)
           alert(`Failed to create worktree: ${result.error}`)
         }
@@ -277,7 +245,6 @@ function App() {
     setPromptMode('none')
   }, [])
 
-  // Prompt field configurations
   const newTerminalFields: PromptField[] = [
     { key: 'name', label: 'Name', type: 'text', placeholder: 'Terminal name', required: true },
     { 
@@ -316,7 +283,6 @@ function App() {
     { key: 'terminalName', label: 'Terminal Name', type: 'text', placeholder: 'Optional: name for the new terminal' }
   ]
 
-  // Loading state
   if (isLoading) {
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-terminal-bg">

@@ -27,9 +27,6 @@ export interface GitBranch {
   upstream?: string
 }
 
-/**
- * Check if a directory is a git repository
- */
 export function isGitRepository(dirPath: string): boolean {
   try {
     execSync('git rev-parse --git-dir', { cwd: dirPath, stdio: 'pipe' })
@@ -39,9 +36,6 @@ export function isGitRepository(dirPath: string): boolean {
   }
 }
 
-/**
- * Get the root directory of a git repository
- */
 export function getGitRoot(dirPath: string): string | null {
   try {
     const root = execSync('git rev-parse --show-toplevel', { 
@@ -55,9 +49,6 @@ export function getGitRoot(dirPath: string): string | null {
   }
 }
 
-/**
- * List all branches in the repository
- */
 export function listBranches(repoPath: string): GitBranch[] {
   try {
     const output = execSync('git branch -a --format="%(refname:short)|%(HEAD)|%(upstream:short)"', {
@@ -82,9 +73,6 @@ export function listBranches(repoPath: string): GitBranch[] {
   }
 }
 
-/**
- * List existing worktrees
- */
 export function listWorktrees(repoPath: string): { path: string; branch: string; commit: string }[] {
   try {
     const output = execSync('git worktree list --porcelain', {
@@ -121,12 +109,8 @@ export function listWorktrees(repoPath: string): { path: string; branch: string;
   }
 }
 
-/**
- * Check if a branch exists (local or remote)
- */
 export function branchExists(repoPath: string, branchName: string): boolean {
   try {
-    // Check for local branch
     const localOutput = execSync(`git branch --list "${branchName}"`, {
       cwd: repoPath,
       stdio: 'pipe',
@@ -135,8 +119,7 @@ export function branchExists(repoPath: string, branchName: string): boolean {
     if (localOutput.trim().length > 0) {
       return true
     }
-    
-    // Check for remote branch
+
     const remoteOutput = execSync(`git branch --list -r "origin/${branchName}"`, {
       cwd: repoPath,
       stdio: 'pipe',
@@ -148,14 +131,10 @@ export function branchExists(repoPath: string, branchName: string): boolean {
   }
 }
 
-/**
- * Create a new git worktree
- */
 export async function createWorktree(options: WorktreeCreateOptions): Promise<WorktreeCreateResult> {
   const { sourcePath, branch, worktreePath, createBranch = false, basePath } = options
 
   try {
-    // Verify source is a git repo
     if (!isGitRepository(sourcePath)) {
       return {
         success: false,
@@ -163,7 +142,6 @@ export async function createWorktree(options: WorktreeCreateOptions): Promise<Wo
       }
     }
 
-    // Get git root
     const gitRoot = getGitRoot(sourcePath)
     if (!gitRoot) {
       return {
@@ -172,7 +150,6 @@ export async function createWorktree(options: WorktreeCreateOptions): Promise<Wo
       }
     }
 
-    // Determine worktree path
     let finalWorktreePath = worktreePath
     if (!finalWorktreePath) {
       const baseDir = basePath || path.dirname(gitRoot)
@@ -180,7 +157,6 @@ export async function createWorktree(options: WorktreeCreateOptions): Promise<Wo
       finalWorktreePath = path.join(baseDir, branchDirName)
     }
 
-    // Check if worktree path already exists
     if (fs.existsSync(finalWorktreePath)) {
       return {
         success: false,
@@ -188,16 +164,13 @@ export async function createWorktree(options: WorktreeCreateOptions): Promise<Wo
       }
     }
 
-    // Check if branch exists and adjust createBranch flag accordingly
     const branchExistsInRepo = branchExists(gitRoot, branch)
     const shouldCreateBranch = !branchExistsInRepo
 
-    // Build the git worktree add command
     const command = shouldCreateBranch
       ? `git worktree add -b "${branch}" "${finalWorktreePath}"`
       : `git worktree add "${finalWorktreePath}" "${branch}"`
 
-    // Execute the command
     await execAsync(command, { cwd: gitRoot })
 
     return {
@@ -214,9 +187,6 @@ export async function createWorktree(options: WorktreeCreateOptions): Promise<Wo
   }
 }
 
-/**
- * Generate a default worktree path based on branch name
- */
 export function generateWorktreePath(gitRoot: string, branch: string): string {
   const baseDir = path.dirname(gitRoot)
   const repoName = path.basename(gitRoot)

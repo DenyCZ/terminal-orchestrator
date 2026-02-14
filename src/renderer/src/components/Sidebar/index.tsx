@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from 'react'
 import { useAppStore } from '../../store'
 import type { Project, ProjectGroup, Terminal } from '@shared/types'
 
-// Context menu position type
 interface ContextMenuState {
   visible: boolean
   x: number
@@ -11,7 +10,6 @@ interface ContextMenuState {
   projectId: string | null
 }
 
-// Status indicator component
 function StatusIndicator({ status }: { status: Terminal['status'] }) {
   const statusConfig = {
     running: { color: 'bg-green-500', blink: false, label: 'Running' },
@@ -31,7 +29,6 @@ function StatusIndicator({ status }: { status: Terminal['status'] }) {
   )
 }
 
-// Context menu component
 function TerminalContextMenu({
   visible,
   x,
@@ -92,7 +89,6 @@ function TerminalContextMenu({
   )
 }
 
-// Terminal item component
 function TerminalItem({ 
   terminal, 
   projectId, 
@@ -193,7 +189,6 @@ function TerminalItem({
   )
 }
 
-// Project item component
 function ProjectItem({ 
   project, 
   isExpanded, 
@@ -378,7 +373,6 @@ function ProjectItem({
   )
 }
 
-// Group item component
 function GroupItem({
   group,
   projects,
@@ -576,13 +570,10 @@ export default function Sidebar() {
   })
   const [editingTerminalId, setEditingTerminalId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
-  
-  // Drag and drop state
   const [draggingProjectId, setDraggingProjectId] = useState<string | null>(null)
   const [dragOverProjectId, setDragOverProjectId] = useState<string | null>(null)
   const [dragOverGroupId, setDragOverGroupId] = useState<string | null>(null)
 
-  // Filter terminals by name
   const getFilteredTerminals = (project: Project): Terminal[] => {
     if (!searchQuery.trim()) return project.terminals
     const query = searchQuery.toLowerCase()
@@ -591,22 +582,18 @@ export default function Sidebar() {
     )
   }
 
-  // Get projects by group (sorted by order)
   const getProjectsByGroup = (groupId: string): Project[] => {
     return projects
       .filter(p => p.groupId === groupId)
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
   }
 
-  // Get ungrouped projects (sorted by order)
   const ungroupedProjects = projects
     .filter(p => !p.groupId)
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-  
-  // Get groups sorted by order
+
   const sortedGroups = [...groups].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
 
-  // Project drag handlers
   const handleProjectDragStart = (_e: React.DragEvent, projectId: string) => {
     setDraggingProjectId(projectId)
   }
@@ -688,7 +675,6 @@ export default function Sidebar() {
   }
 
   const handleGroupDragOver = (e: React.DragEvent, groupId: string) => {
-    // Only handle if dragging a project, move project to this group
     if (draggingProjectId) {
       e.preventDefault()
       setDragOverGroupId(groupId)
@@ -718,7 +704,6 @@ export default function Sidebar() {
     setDragOverGroupId(null)
   }
 
-  // Auto-expand groups and projects with matching terminals when searching
   useEffect(() => {
     if (searchQuery.trim()) {
       const projectsWithMatches = projects.filter(p => 
@@ -796,7 +781,6 @@ export default function Sidebar() {
     }
   }
 
-  // Handle drag and drop
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
     setDragOver(true)
@@ -809,23 +793,15 @@ export default function Sidebar() {
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault()
     setDragOver(false)
-    
-    // Get dropped files
+
     const files = e.dataTransfer.files
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
-      // Check if it's a directory (path property in Electron)
-      const path = (file as any).path || file.name
+      const path = (file as File & { path?: string }).path
       if (path) {
         const folderName = path.split(/[\\/]/).pop() || 'New Project'
         const project = await createProject(folderName, path)
-        // Create default terminal
-        await createTerminal(
-          project.id,
-          'Terminal 1',
-          'powershell',
-          path
-        )
+        await createTerminal(project.id, 'Terminal 1', 'powershell', path)
         setExpandedProjects(prev => new Set([...prev, project.id]))
       }
     }

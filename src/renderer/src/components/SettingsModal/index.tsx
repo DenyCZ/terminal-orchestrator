@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { useAppStore } from '../../store';
-import { SHORTCUT_DEFINITIONS, DEFAULT_SHORTCUTS, type KeyBinding, type ShortcutId } from '@shared/types';
+import { useEffect, useRef, useState, useCallback } from 'react'
+import { useAppStore } from '../../store'
+import { SHORTCUT_DEFINITIONS, DEFAULT_SHORTCUTS, type ShortcutId, type KeyBinding } from '@shared/types'
+import { formatBindingString } from '../../utils/keybinds'
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -107,35 +108,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     if (confirm('Reset all keyboard shortcuts to their default values?')) {
       resetKeyboardShortcuts();
     }
-  };
-  
-  // Format key binding for display
-  const formatBinding = (binding: KeyBinding): string => {
-    const parts: string[] = [];
-    if (binding.ctrl) parts.push('Ctrl');
-    if (binding.shift) parts.push('Shift');
-    if (binding.alt) parts.push('Alt');
-    if (binding.meta) parts.push('Meta');
-    
-    // Format the key
-    let key = binding.key;
-    if (key === ' ') key = 'Space';
-    else if (key === 'ArrowUp') key = '↑';
-    else if (key === 'ArrowDown') key = '↓';
-    else if (key === 'ArrowLeft') key = '←';
-    else if (key === 'ArrowRight') key = '→';
-    else if (key === 'Escape') key = 'Esc';
-    else if (key === 'Tab') key = 'Tab';
-    else if (key === 'Enter') key = 'Enter';
-    else if (key === 'Backspace') key = '⌫';
-    else if (key === 'Delete') key = 'Del';
-    else if (key.length === 1) key = key.toUpperCase();
-    
-    parts.push(key);
-    return parts.join(' + ');
-  };
-  
-  // Group shortcuts by category
+  }
+
   const groupedShortcuts = SHORTCUT_DEFINITIONS.reduce((acc, def) => {
     const group = def.group;
     if (!acc[group]) acc[group] = [];
@@ -216,7 +190,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                   tabIndex={0}
                                   autoFocus
                                 >
-                                  {pendingBinding ? formatBinding(pendingBinding) : 'Press new key...'}
+                                  {pendingBinding ? formatBindingString(pendingBinding) : 'Press new key...'}
                                 </div>
                               ) : (
                                 <button
@@ -224,7 +198,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                   onClick={() => startEditingShortcut(def.id as ShortcutId)}
                                   title="Click to change"
                                 >
-                                  {formatBinding(currentBinding)}
+                                  {formatBindingString(currentBinding)}
                                 </button>
                               )}
                               {isEditing && (
