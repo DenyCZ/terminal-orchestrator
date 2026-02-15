@@ -1,7 +1,8 @@
 import { create } from 'zustand'
-import type { Project, ProjectGroup, Terminal, AppConfig, ShortcutConfig, KeyBinding, ShellType } from '@shared/types'
+import { v4 as uuid } from 'uuid'
+import type { Project, ProjectGroup, Terminal, AppConfig, ShortcutConfig, KeyBinding, ShellType, PredefinedTerminal } from '@shared/types'
 import { DEFAULT_SHORTCUTS, DEFAULT_SETTINGS } from '@shared/types'
-import type { TerminalDataBatch } from '@shared/ipc'
+import type { TerminalDataBatch, OpenCodeSessionInfo, OpenCodeWatcherStatus } from '@shared/ipc'
 
 interface AppState {
   // Data
@@ -10,6 +11,10 @@ interface AppState {
   activeProjectId: string | null
   activeTerminalId: string | null
   settings: AppConfig['settings']
+  
+  // OpenCode sessions
+  openCodeSessions: Map<string, OpenCodeSessionInfo>
+  openCodeStatus: OpenCodeWatcherStatus | null
   
   // Loading state
   isLoading: boolean
@@ -56,6 +61,14 @@ interface AppState {
   updateKeyboardShortcut: (shortcutId: keyof ShortcutConfig, binding: KeyBinding) => void
   resetKeyboardShortcuts: () => void
   getKeyboardShortcuts: () => ShortcutConfig
+
+  // Predefined terminals
+  createPredefinedTerminal: (terminal: Omit<PredefinedTerminal, 'id'>) => void
+  updatePredefinedTerminal: (id: string, updates: Partial<PredefinedTerminal>) => void
+  deletePredefinedTerminal: (id: string) => void
+  
+  // OpenCode session helpers
+  getOpenCodeSession: (directory: string) => OpenCodeSessionInfo | null
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -65,6 +78,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   activeProjectId: null,
   activeTerminalId: null,
   settings: DEFAULT_SETTINGS,
+  openCodeSessions: new Map(),
+  openCodeStatus: null,
   isLoading: true,
   
   // Load config from main process
@@ -99,10 +114,44 @@ export const useAppStore = create<AppState>((set, get) => ({
             // Natural exit: completed (code 0) or error (non-zero)
             const newStatus = event.exitCode === 0 ? 'completed' : 'error'
             get().updateTerminalStatus(project.id, event.terminalId, newStatus)
+            
+            // Clear openCodeSessionId when terminal exits
+            if (terminal.openCodeSessionId) {
+              get().updateTerminal(project.id, event.terminalId, { openCodeSessionId: undefined })
+            }
             break
           }
         }
       })
+      
+      // Setup OpenCode session event listener
+      window.electronAPI.opencode.onEvent((event) => {
+        if (event.type === 'sessions-updated' && event.sessions) {
+          const sessionMap = new Map<string, OpenCodeSessionInfo>()
+          event.sessions.forEach(s => {
+            // Normalize directory path for lookup
+            const normalizedDir = s.directory.toLowerCase().replace(/\\/g, '/')
+            sessionMap.set(normalizedDir, s)
+          })
+          set({ openCodeSessions: sessionMap })
+        } else if (event.type === 'status-changed' && event.status) {
+          set({ openCodeStatus: event.status })
+        }
+      })
+      
+      // Load initial OpenCode sessions
+      const sessions = await window.electronAPI.opencode.getSessions()
+      const sessionMap = new Map<string, OpenCodeSessionInfo>()
+      sessions.forEach(s => {
+        const normalizedDir = s.directory.toLowerCase().replace(/\\/g, '/')
+        sessionMap.set(normalizedDir, s)
+      })
+      set({ openCodeSessions: sessionMap })
+      
+      // Load initial OpenCode status
+      const status = await window.electronAPI.opencode.getStatus()
+      set({ openCodeStatus: status })
+      
     } catch (error) {
       console.error('Failed to load config:', error)
       set({ isLoading: false })
@@ -390,5 +439,36 @@ export const useAppStore = create<AppState>((set, get) => ({
   getKeyboardShortcuts: () => {
     const { settings } = get()
     return settings.keyboardShortcuts || DEFAULT_SHORTCUTS
+  },
+
+  // Predefined terminals
+  createPredefinedTerminal: (terminal: Omit<PredefinedTerminal, 'id'>) => {
+    const newTerminal: PredefinedTerminal = {
+      ...terminal,
+      id: uuid()
+    }
+    const currentTerminals = get().settings.predefinedTerminals || []
+    const updatedTerminals = [...currentTerminals, newTerminal]
+    get().updateSettings({ predefinedTerminals: updatedTerminals })
+  },
+
+  updatePredefinedTerminal: (id: string, updates: Partial<PredefinedTerminal>) => {
+    const currentTerminals = get().settings.predefinedTerminals || []
+    const updatedTerminals = currentTerminals.map(t =>
+      t.id === id ? { ...t, ...updates } : t
+    )
+    get().updateSettings({ predefinedTerminals: updatedTerminals })
+  },
+
+  deletePredefinedTerminal: (id: string) => {
+    const currentTerminals = get().settings.predefinedTerminals || []
+    const updatedTerminals = currentTerminals.filter(t => t.id !== id)
+    get().updateSettings({ predefinedTerminals: updatedTerminals })
+  },
+  
+  // OpenCode session helpers
+  getOpenCodeSession: (directory: string): OpenCodeSessionInfo | null => {
+    const normalizedDir = directory.toLowerCase().replace(/\\/g, '/')
+    return get().openCodeSessions.get(normalizedDir) || null
   }
 }))

@@ -1,6 +1,6 @@
 import { useEffect, useCallback } from 'react'
 import { useAppStore } from '../store'
-import { DEFAULT_SHORTCUTS, type KeyBinding } from '@shared/types'
+import { DEFAULT_SHORTCUTS, type KeyBinding, type PredefinedTerminal } from '@shared/types'
 
 export interface KeyboardShortcut {
   key: string;
@@ -28,6 +28,8 @@ interface UseKeyboardShortcutsOptions {
   onClearTerminal?: () => void;
   onFocusTerminal?: () => void;
   onOpenHelp?: () => void;
+  onSpawnPredefinedTerminal?: (terminal: PredefinedTerminal) => void;
+  predefinedTerminals?: PredefinedTerminal[];
   isCommandPaletteOpen: boolean;
   enabled?: boolean;
 }
@@ -67,6 +69,8 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
     onClearTerminal,
     onFocusTerminal,
     onOpenHelp,
+    onSpawnPredefinedTerminal,
+    predefinedTerminals = [],
     isCommandPaletteOpen,
     enabled = true
   } = options;
@@ -203,10 +207,22 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
       return;
     }
 
+    // Check predefined terminal shortcuts (only when not in input field)
+    if (!isInputField && !isXtermTerminal) {
+      for (const terminal of predefinedTerminals) {
+        if (terminal.keybinding && matchesBinding(event, terminal.keybinding)) {
+          event.preventDefault();
+          onSpawnPredefinedTerminal?.(terminal);
+          return;
+        }
+      }
+    }
+
   }, [
     enabled,
     isCommandPaletteOpen,
     shortcuts,
+    predefinedTerminals,
     onOpenCommandPalette,
     onCloseCommandPalette,
     onNextTerminal,
@@ -221,7 +237,8 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
     onSwitchTerminal,
     onClearTerminal,
     onFocusTerminal,
-    onOpenHelp
+    onOpenHelp,
+    onSpawnPredefinedTerminal
   ]);
 
   useEffect(() => {

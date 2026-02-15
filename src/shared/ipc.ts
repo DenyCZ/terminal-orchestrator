@@ -57,7 +57,13 @@ export const IPC_CHANNELS = {
   WEBUI_START: 'webui:start',
   WEBUI_STOP: 'webui:stop',
   WEBUI_STATUS: 'webui:status',
-  WEBUI_REGENERATE_PIN: 'webui:regenerate-pin'
+  WEBUI_REGENERATE_PIN: 'webui:regenerate-pin',
+  
+  // OpenCode session operations
+  OPENCODE_SESSIONS: 'opencode:sessions',
+  OPENCODE_SESSION_BY_DIR: 'opencode:session-by-dir',
+  OPENCODE_STATUS: 'opencode:status',
+  OPENCODE_EVENT: 'opencode:event',  // Main -> renderer event
 } as const;
 
 // Terminal spawn configuration
@@ -142,5 +148,29 @@ export interface ReadDirOptions {
   path: string;
   recursive?: boolean;
   maxDepth?: number;
+}
+
+// OpenCode session info (simplified for display)
+export interface OpenCodeSessionInfo {
+  id: string;
+  title: string;
+  directory: string;
+  updatedAt: number;
+}
+
+// OpenCode watcher status
+export interface OpenCodeWatcherStatus {
+  sqliteConnected: boolean;
+  sseConnected: boolean;
+  pollingActive: boolean;
+  sessionCount: number;
+  lastUpdate: number | null;
+}
+
+// OpenCode session event (main -> renderer)
+export interface OpenCodeSessionEvent {
+  type: 'sessions-updated' | 'status-changed';
+  sessions?: OpenCodeSessionInfo[];
+  status?: OpenCodeWatcherStatus;
 }
 

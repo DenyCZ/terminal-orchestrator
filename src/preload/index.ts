@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC_CHANNELS } from '@shared/ipc'
-import type { TerminalDataBatch, TerminalExitEvent, PtyConfig, WorktreeCreateOptions, WorktreeCreateResult, GitBranch, WebUIStatus, FileEntry, ReadDirOptions } from '@shared/ipc'
+import type { TerminalDataBatch, TerminalExitEvent, PtyConfig, WorktreeCreateOptions, WorktreeCreateResult, GitBranch, WebUIStatus, FileEntry, ReadDirOptions, OpenCodeSessionInfo, OpenCodeWatcherStatus, OpenCodeSessionEvent } from '@shared/ipc'
 import type { Project, ProjectGroup, Terminal, AppConfig, AppSettings, DetectedShell, ShellType } from '@shared/types'
 
 // Exposed API to renderer
@@ -137,6 +137,23 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.WEBUI_STATUS),
     regeneratePin: (): Promise<{ pin: string }> =>
       ipcRenderer.invoke(IPC_CHANNELS.WEBUI_REGENERATE_PIN)
+  },
+
+  // OpenCode session operations
+  opencode: {
+    getSessions: (): Promise<OpenCodeSessionInfo[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.OPENCODE_SESSIONS),
+    getSessionByDir: (directory: string): Promise<OpenCodeSessionInfo | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.OPENCODE_SESSION_BY_DIR, directory),
+    getStatus: (): Promise<OpenCodeWatcherStatus> =>
+      ipcRenderer.invoke(IPC_CHANNELS.OPENCODE_STATUS),
+    
+    // Event listener for session updates
+    onEvent: (callback: (event: OpenCodeSessionEvent) => void) => {
+      const listener = (_: unknown, event: OpenCodeSessionEvent) => callback(event)
+      ipcRenderer.on(IPC_CHANNELS.OPENCODE_EVENT, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.OPENCODE_EVENT, listener)
+    }
   },
 
   // Initialize main window reference

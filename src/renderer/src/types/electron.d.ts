@@ -1,5 +1,5 @@
 import type { Project, ProjectGroup, Terminal, AppConfig, AppSettings, DetectedShell, ShellType } from '@shared/types'
-import type { TerminalDataBatch, TerminalExitEvent, WorktreeCreateOptions, WorktreeCreateResult, GitBranch, WebUIStatus, FileEntry, ReadDirOptions } from '@shared/ipc'
+import type { TerminalDataBatch, TerminalExitEvent, WorktreeCreateOptions, WorktreeCreateResult, GitBranch, WebUIStatus, FileEntry, ReadDirOptions, OpenCodeSessionInfo, OpenCodeWatcherStatus, OpenCodeSessionEvent } from '@shared/ipc'
 
 export interface ElectronAPI {
   group: {
@@ -68,6 +68,13 @@ export interface ElectronAPI {
     stop: () => Promise<{ success: boolean }>
     getStatus: () => Promise<WebUIStatus>
     regeneratePin: () => Promise<{ pin: string }>
+  }
+  
+  opencode: {
+    getSessions: () => Promise<OpenCodeSessionInfo[]>
+    getSessionByDir: (directory: string) => Promise<OpenCodeSessionInfo | null>
+    getStatus: () => Promise<OpenCodeWatcherStatus>
+    onEvent: (callback: (event: OpenCodeSessionEvent) => void) => () => void
   }
   
   init: () => void

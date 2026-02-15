@@ -8,7 +8,7 @@ import InlinePrompt, { type PromptField } from './components/InlinePrompt'
 import HelpModal from './components/HelpModal'
 import SettingsModal from './components/SettingsModal'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
-import type { ShellType, DetectedShell } from '@shared/types'
+import type { ShellType, DetectedShell, PredefinedTerminal } from '@shared/types'
 
 type PromptMode = 'none' | 'new-terminal' | 'new-project' | 'new-worktree'
 
@@ -177,6 +177,21 @@ function App() {
     setIsHelpModalOpen(false)
   }, [])
 
+  const handleSpawnPredefinedTerminal = useCallback(async (terminal: PredefinedTerminal) => {
+    const projectId = activeProjectId || projects[0]?.id
+    const project = projects.find(p => p.id === projectId)
+    
+    if (projectId && project) {
+      await createTerminal(
+        projectId,
+        terminal.name,
+        terminal.shellType || settings.defaultShell,
+        project.rootDirectory || '',
+        terminal.command
+      )
+    }
+  }, [activeProjectId, projects, createTerminal, settings.defaultShell])
+
   const handleOpenSettings = useCallback(() => {
     setIsSettingsModalOpen(true)
   }, [])
@@ -201,6 +216,8 @@ function App() {
     onClearTerminal: handleClearTerminal,
     onFocusTerminal: handleFocusTerminal,
     onOpenHelp: handleOpenHelp,
+    onSpawnPredefinedTerminal: handleSpawnPredefinedTerminal,
+    predefinedTerminals: settings.predefinedTerminals || [],
     isCommandPaletteOpen: isCommandPaletteOpen,
     enabled: promptMode === 'none' && !isHelpModalOpen && !isSettingsModalOpen
   })

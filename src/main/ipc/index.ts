@@ -2,12 +2,13 @@ import { ipcMain, BrowserWindow, shell } from 'electron'
 import { ConfigStore } from '../store'
 import { PtyManager } from '../pty'
 import { IPC_CHANNELS } from '@shared/ipc'
-import type { PtyConfig, TerminalDataBatch, TerminalExitEvent } from '@shared/ipc'
+import type { PtyConfig, TerminalDataBatch, TerminalExitEvent, OpenCodeSessionInfo, OpenCodeWatcherStatus } from '@shared/ipc'
 import type { Terminal, Project, ProjectGroup, WebUISettings, AppSettings, DetectedShell, ShellType } from '@shared/types'
 import type { FileEntry, ReadDirOptions } from '@shared/ipc'
 import * as git from '../git'
 import { WebUIManager } from '../web-ui-manager'
 import { detectShells } from '../shell-detector'
+import { getOpenCodeWatcher } from '../opencode'
 import * as fs from 'fs'
 import * as path from 'path'
 import { spawn } from 'child_process'
@@ -160,6 +161,15 @@ export function setupIpcHandlers(): void {
         setTimeout(() => {
           ptyManager.write(terminalId, terminal.startupCommand! + '\r')
         }, 500)
+        
+        // If startup command contains "opencode", set the session ID
+        // This ensures only terminals explicitly running opencode show session names
+        if (terminal.startupCommand.toLowerCase().includes('opencode')) {
+          const session = openCodeWatcher.getSessionByDirectory(terminal.workingDirectory)
+          if (session) {
+            store.updateTerminal(projectId, terminalId, { openCodeSessionId: session.id })
+          }
+        }
       }
 
       return { pid: result.pid }
@@ -168,6 +178,16 @@ export function setupIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.TERMINAL_STOP, (_, terminalId: string): void => {
     ptyManager.kill(terminalId)
+    
+    // Clear openCodeSessionId when terminal stops
+    const config = store.getConfig()
+    for (const project of config.projects) {
+      const terminal = project.terminals.find(t => t.id === terminalId)
+      if (terminal) {
+        store.updateTerminal(project.id, terminalId, { openCodeSessionId: undefined })
+        break
+      }
+    }
   })
 
   ipcMain.handle(
@@ -388,5 +408,67 @@ export function setupIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.WEBUI_REGENERATE_PIN, (): { pin: string } => {
     const newPin = webUIManager.regeneratePIN()
     return { pin: newPin }
+  })
+
+  // =====================
+  // OpenCode Session Operations
+  // =====================
+
+  const openCodeWatcher = getOpenCodeWatcher()
+
+  // Start the watcher
+  openCodeWatcher.start()
+
+  // Get all sessions
+  ipcMain.handle(IPC_CHANNELS.OPENCODE_SESSIONS, (): OpenCodeSessionInfo[] => {
+    return openCodeWatcher.getAllSessions()
+  })
+
+  // Get session by directory
+  ipcMain.handle(IPC_CHANNELS.OPENCODE_SESSION_BY_DIR, (_, directory: string): OpenCodeSessionInfo | null => {
+    return openCodeWatcher.getSessionByDirectory(directory)
+  })
+
+  // Get watcher status
+  ipcMain.handle(IPC_CHANNELS.OPENCODE_STATUS, (): OpenCodeWatcherStatus => {
+    return openCodeWatcher.getStatus()
+  })
+
+  // Forward session changes to renderer
+  openCodeWatcher.onSessionChange((sessions) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(IPC_CHANNELS.OPENCODE_EVENT, {
+        type: 'sessions-updated',
+        sessions: Array.from(sessions.values())
+      })
+      
+      // Also update terminals that have opencode startup command with new session IDs
+      const config = store.getConfig()
+      for (const project of config.projects) {
+        for (const terminal of project.terminals) {
+          // Only update terminals that:
+          // 1. Have opencode in startup command
+          // 2. Are currently running
+          // 3. Don't already have a session OR session is stale
+          if (terminal.startupCommand?.toLowerCase().includes('opencode') && 
+              terminal.status === 'running') {
+            const session = sessions.get(terminal.workingDirectory.toLowerCase().replace(/\\/g, '/'))
+            if (session && session.id !== terminal.openCodeSessionId) {
+              store.updateTerminal(project.id, terminal.id, { openCodeSessionId: session.id })
+            }
+          }
+        }
+      }
+    }
+  })
+
+  // Forward status changes to renderer
+  openCodeWatcher.onStatusChange((status) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(IPC_CHANNELS.OPENCODE_EVENT, {
+        type: 'status-changed',
+        status
+      })
+    }
   })
 }

@@ -8,7 +8,7 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-type SettingsTab = 'shortcuts' | 'general' | 'webui';
+type SettingsTab = 'shortcuts' | 'general' | 'webui' | 'predefined';
 
 /**
  * SettingsModal - Modal for configuring application settings including keyboard shortcuts.
@@ -21,11 +21,22 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [webUIStatus, setWebUIStatus] = useState<WebUIStatus | null>(null);
   const [availableShells, setAvailableShells] = useState<DetectedShell[]>([]);
   
+  // Predefined terminals state
+  const [editingPredefinedId, setEditingPredefinedId] = useState<string | null>(null);
+  const [editingPredefinedBinding, setEditingPredefinedBinding] = useState<string | null>(null);
+  const [newPredefinedName, setNewPredefinedName] = useState('');
+  const [newPredefinedCommand, setNewPredefinedCommand] = useState('');
+  const [newPredefinedShell, setNewPredefinedShell] = useState<ShellType>('powershell');
+  const [newPredefinedBinding, setNewPredefinedBinding] = useState<KeyBinding | null>(null);
+  
   const { 
     settings, 
     updateKeyboardShortcut, 
     resetKeyboardShortcuts,
-    updateSettings
+    updateSettings,
+    createPredefinedTerminal,
+    updatePredefinedTerminal,
+    deletePredefinedTerminal
   } = useAppStore();
   
   // Get current shortcuts from settings or defaults
@@ -250,6 +261,12 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           >
             Mobile Web UI
           </button>
+          <button
+            className={`settings-tab ${activeTab === 'predefined' ? 'active' : ''}`}
+            onClick={() => setActiveTab('predefined')}
+          >
+            Predefined Terminals
+          </button>
         </div>
         
         <div className="settings-modal-content">
@@ -467,6 +484,217 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   )}
                 </>
               )}
+            </div>
+          )}
+          
+          {activeTab === 'predefined' && (
+            <div className="settings-predefined">
+              <div className="settings-group">
+                <h3 className="settings-group-title">Predefined Terminals</h3>
+                <p className="settings-group-description">
+                  Define terminals that can be quickly spawned with keyboard shortcuts. 
+                  These will use the current project's root directory.
+                </p>
+                
+                {/* Add new predefined terminal */}
+                <div className="settings-predefined-add">
+                  <h4>Add New Predefined Terminal</h4>
+                  <div className="settings-predefined-form">
+                    <div className="settings-predefined-field">
+                      <label>Name</label>
+                      <input
+                        type="text"
+                        placeholder="e.g., OpenCode"
+                        value={newPredefinedName}
+                        onChange={(e) => setNewPredefinedName(e.target.value)}
+                      />
+                    </div>
+                    <div className="settings-predefined-field">
+                      <label>Command</label>
+                      <input
+                        type="text"
+                        placeholder="e.g., opencode"
+                        value={newPredefinedCommand}
+                        onChange={(e) => setNewPredefinedCommand(e.target.value)}
+                      />
+                    </div>
+                    <div className="settings-predefined-field">
+                      <label>Shell (optional)</label>
+                      <select
+                        value={newPredefinedShell}
+                        onChange={(e) => setNewPredefinedShell(e.target.value as ShellType)}
+                      >
+                        {availableShells.map(shell => (
+                          <option key={shell.id} value={shell.id}>
+                            {shell.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="settings-predefined-field">
+                      <label>Keybinding (optional)</label>
+                      {editingPredefinedBinding === 'new' ? (
+                        <div 
+                          className="settings-shortcut-input"
+                          onKeyDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            
+                            if (e.key === 'Escape') {
+                              setEditingPredefinedBinding(null);
+                              setNewPredefinedBinding(null);
+                              return;
+                            }
+                            
+                            if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) {
+                              return;
+                            }
+                            
+                            const binding: KeyBinding = {
+                              key: e.key === ' ' ? ' ' : e.key,
+                              ctrl: e.ctrlKey || undefined,
+                              shift: e.shiftKey || undefined,
+                              alt: e.altKey || undefined,
+                              meta: e.metaKey || undefined
+                            };
+                            
+                            setNewPredefinedBinding(binding);
+                            setEditingPredefinedBinding(null);
+                          }}
+                          tabIndex={0}
+                          autoFocus
+                        >
+                          Press key combination...
+                        </div>
+                      ) : (
+                        <button
+                          className="settings-shortcut-key"
+                          onClick={() => setEditingPredefinedBinding('new')}
+                        >
+                          {newPredefinedBinding ? formatBinding(newPredefinedBinding) : 'Click to set'}
+                        </button>
+                      )}
+                    </div>
+                    <button
+                      className="settings-btn-primary"
+                      onClick={() => {
+                        if (newPredefinedName.trim() && newPredefinedCommand.trim()) {
+                          createPredefinedTerminal({
+                            name: newPredefinedName.trim(),
+                            command: newPredefinedCommand.trim(),
+                            shellType: newPredefinedShell,
+                            keybinding: newPredefinedBinding || undefined
+                          });
+                          setNewPredefinedName('');
+                          setNewPredefinedCommand('');
+                          setNewPredefinedBinding(null);
+                        }
+                      }}
+                      disabled={!newPredefinedName.trim() || !newPredefinedCommand.trim()}
+                    >
+                      Add Terminal
+                    </button>
+                  </div>
+                </div>
+                
+                {/* List existing predefined terminals */}
+                <div className="settings-predefined-list">
+                  <h4>Existing Predefined Terminals</h4>
+                  {(settings.predefinedTerminals || []).length === 0 ? (
+                    <p className="settings-predefined-empty">No predefined terminals yet.</p>
+                  ) : (
+                    (settings.predefinedTerminals || []).map((terminal) => (
+                      <div key={terminal.id} className="settings-predefined-item">
+                        {editingPredefinedId === terminal.id ? (
+                          <div className="settings-predefined-edit">
+                            <input
+                              type="text"
+                              defaultValue={terminal.name}
+                              onBlur={(e) => {
+                                updatePredefinedTerminal(terminal.id, { name: (e.target as HTMLInputElement).value });
+                                setEditingPredefinedId(null);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  updatePredefinedTerminal(terminal.id, { name: (e.target as HTMLInputElement).value });
+                                  setEditingPredefinedId(null);
+                                } else if (e.key === 'Escape') {
+                                  setEditingPredefinedId(null);
+                                }
+                              }}
+                              autoFocus
+                            />
+                          </div>
+                        ) : (
+                          <div className="settings-predefined-info">
+                            <span 
+                              className="settings-predefined-name"
+                              onClick={() => setEditingPredefinedId(terminal.id)}
+                              title="Click to edit name"
+                            >
+                              {terminal.name}
+                            </span>
+                            <code className="settings-predefined-command">{terminal.command}</code>
+                            {terminal.shellType && (
+                              <span className="settings-predefined-shell">({terminal.shellType})</span>
+                            )}
+                          </div>
+                        )}
+                        <div className="settings-predefined-binding">
+                          {editingPredefinedBinding === terminal.id ? (
+                            <div 
+                              className="settings-shortcut-input"
+                              onKeyDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                
+                                if (e.key === 'Escape') {
+                                  setEditingPredefinedBinding(null);
+                                  return;
+                                }
+                                
+                                if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) {
+                                  return;
+                                }
+                                
+                                const binding: KeyBinding = {
+                                  key: e.key === ' ' ? ' ' : e.key,
+                                  ctrl: e.ctrlKey || undefined,
+                                  shift: e.shiftKey || undefined,
+                                  alt: e.altKey || undefined,
+                                  meta: e.metaKey || undefined
+                                };
+                                
+                                updatePredefinedTerminal(terminal.id, { keybinding: binding });
+                                setEditingPredefinedBinding(null);
+                              }}
+                              tabIndex={0}
+                              autoFocus
+                            >
+                              Press key combination...
+                            </div>
+                          ) : (
+                            <button
+                              className="settings-shortcut-key"
+                              onClick={() => setEditingPredefinedBinding(terminal.id)}
+                              title="Click to change keybinding"
+                            >
+                              {terminal.keybinding ? formatBinding(terminal.keybinding) : 'No keybinding'}
+                            </button>
+                          )}
+                          <button
+                            className="settings-predefined-delete"
+                            onClick={() => deletePredefinedTerminal(terminal.id)}
+                            title="Delete"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </div>

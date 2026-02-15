@@ -169,9 +169,26 @@ function TerminalItem({
   isEditing: boolean
   onRenameComplete: (newName: string) => void
 }) {
-  const { deleteTerminal } = useAppStore()
+  const { deleteTerminal, getOpenCodeSession } = useAppStore()
   const [editName, setEditName] = useState(terminal.name)
   const inputRef = useRef<HTMLInputElement>(null)
+  
+  // Only show session if this terminal has an active OpenCode session
+  // (openCodeSessionId is set when opencode is detected in this terminal)
+  const openCodeSession = terminal.openCodeSessionId 
+    ? getOpenCodeSession(terminal.workingDirectory) 
+    : null
+  
+  // Check if terminal has a default name (Terminal 1, Terminal 2, etc.)
+  const isDefaultName = /^Terminal\s+\d+$/.test(terminal.name)
+  
+  // Determine what to display:
+  // - If default name + OpenCode session: show only session title
+  // - If custom name + OpenCode session: show terminal name + session title below
+  // - If no OpenCode session: show terminal name
+  const showSessionAsMain = isDefaultName && openCodeSession
+  const displayName = showSessionAsMain ? openCodeSession.title : terminal.name
+  const showSessionBelow = !isDefaultName && openCodeSession
 
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -225,7 +242,18 @@ function TerminalItem({
       onContextMenu={onContextMenu}
     >
       <StatusIndicator status={terminal.status} />
-      <span className="flex-1 text-sm truncate">{terminal.name}</span>
+      <div className="flex-1 min-w-0">
+        <span className={`text-sm truncate block ${showSessionAsMain ? 'text-[#4ec9b0]' : ''}`} title={displayName}>
+          {displayName.length > 45 ? displayName.substring(0, 45) + '...' : displayName}
+        </span>
+        {showSessionBelow && (
+          <span className="text-xs text-[#4ec9b0] truncate block opacity-80" title={openCodeSession.title}>
+            {openCodeSession.title.length > 45 
+              ? openCodeSession.title.substring(0, 45) + '...' 
+              : openCodeSession.title}
+          </span>
+        )}
+      </div>
       
       <button
         onClick={(e) => {
