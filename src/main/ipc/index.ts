@@ -294,32 +294,16 @@ export function setupIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.SHELL_OPEN_VSCODE, async (_, filePath: string): Promise<{ success: boolean; error?: string }> => {
     try {
-      // Try 'code' first (standard VSCode command)
-      const child = spawn('code', [filePath], { 
-        detached: true,
-        stdio: 'ignore',
-        shell: true
-      })
-      
-      child.on('error', (err) => {
-        console.error('Failed to open VSCode:', err)
-        // Try fallback: open with shell
-        shell.openExternal(`vscode://file/${filePath}`)
-      })
-      
-      child.unref()
+      // Use vscode:// protocol directly - most reliable method on Windows
+      // VSCode registers this protocol handler on installation
+      const vscodeUrl = `vscode://file/${encodeURIComponent(filePath)}`
+      await shell.openExternal(vscodeUrl)
       return { success: true }
     } catch (error) {
       console.error('Failed to open VSCode:', error)
-      // Fallback: try using vscode:// protocol
-      try {
-        await shell.openExternal(`vscode://file/${filePath}`)
-        return { success: true }
-      } catch (fallbackError) {
-        return { 
-          success: false, 
-          error: error instanceof Error ? error.message : 'Failed to open VSCode' 
-        }
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Failed to open VSCode' 
       }
     }
   })

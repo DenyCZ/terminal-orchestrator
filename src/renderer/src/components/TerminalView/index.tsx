@@ -52,11 +52,65 @@ export default function TerminalView({
   const hasStartedRef = useRef(false)
   const { startTerminal, stopTerminal, restartTerminal } = useAppStore()
   
+  // Performance optimization refs
+  const isUserAtBottomRef = useRef(true)
+  const writeBufferRef = useRef<string[]>([])
+  const bufferTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const scrollDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const writeInterval = 16 // Match backend batch rate
+  
   // File explorer state
   const [showFileExplorer, setShowFileExplorer] = useState(false)
   const [explorerWidth, setExplorerWidth] = useState(250)
   const [isResizing, setIsResizing] = useState(false)
   const [selectedFile, setSelectedFile] = useState<FileEntry | null>(null)
+
+  // Helper to check if user is at bottom of terminal
+  const isAtBottom = useCallback(() => {
+    const term = terminalRef.current
+    if (!term) return true
+    
+    const buffer = term.buffer.active
+    const viewportY = buffer.viewportY
+    const bufferLength = buffer.length
+    const rows = term.rows
+    
+    // Allow 2 lines tolerance
+    return viewportY >= bufferLength - rows - 2
+  }, [])
+
+  // Debounced scroll to bottom - only if user is at bottom
+  const scrollToBottomDebounced = useCallback(() => {
+    if (scrollDebounceTimerRef.current) {
+      clearTimeout(scrollDebounceTimerRef.current)
+    }
+    
+    scrollDebounceTimerRef.current = setTimeout(() => {
+      if (terminalRef.current && isUserAtBottomRef.current) {
+        terminalRef.current.scrollToBottom()
+      }
+    }, 50)
+  }, [])
+
+  // Write buffer functions for performance
+  const flushWriteBuffer = useCallback(() => {
+    if (writeBufferRef.current.length > 0 && terminalRef.current) {
+      terminalRef.current.write(writeBufferRef.current.join(''))
+      writeBufferRef.current = []
+      bufferTimerRef.current = null
+      scrollToBottomDebounced()
+    }
+  }, [scrollToBottomDebounced])
+
+  const queueWrite = useCallback((data: string) => {
+    writeBufferRef.current.push(data)
+    
+    if (!bufferTimerRef.current) {
+      bufferTimerRef.current = setTimeout(() => {
+        flushWriteBuffer()
+      }, writeInterval)
+    }
+  }, [flushWriteBuffer])
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -95,7 +149,7 @@ export default function TerminalView({
       scrollback: 5000,
       convertEol: true,
       // Native-like scrolling configuration
-      smoothScrollDuration: 150,
+      smoothScrollDuration: 0,
       scrollSensitivity: 1.5,
       fastScrollSensitivity: 7,
       scrollOnUserInput: true
@@ -181,6 +235,11 @@ export default function TerminalView({
       window.electronAPI?.terminal.write(terminal.id, data)
     })
 
+    // Track scroll position to detect when user scrolls up
+    term.onScroll(() => {
+      isUserAtBottomRef.current = isAtBottom()
+    })
+
     // Custom wheel handler for Ctrl+wheel zoom
     term.attachCustomWheelEventHandler((event) => {
       if (event.ctrlKey) {
@@ -201,16 +260,27 @@ export default function TerminalView({
       return true
     })
 
-    // Handle output with auto-scroll to bottom
+    // Handle output with buffered writes for performance
     const removeDataListener = window.electronAPI?.terminal.onData((data) => {
-      if (data.terminalId === terminal.id && terminalRef.current) {
-        terminalRef.current.write(data.data)
-        // Auto-scroll to bottom on new output for native terminal feel
-        terminalRef.current.scrollToBottom()
+      if (data.terminalId === terminal.id) {
+        queueWrite(data.data)
       }
     })
 
     return () => {
+      // Clear scroll debounce timer
+      if (scrollDebounceTimerRef.current) {
+        clearTimeout(scrollDebounceTimerRef.current)
+        scrollDebounceTimerRef.current = null
+      }
+      
+      // Clear write buffer timer
+      if (bufferTimerRef.current) {
+        clearTimeout(bufferTimerRef.current)
+        bufferTimerRef.current = null
+      }
+      writeBufferRef.current = []
+      
       clearTimeout(resizeTimeout)
       resizeObserver.disconnect()
       removeDataListener?.()

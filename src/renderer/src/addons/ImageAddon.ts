@@ -34,6 +34,8 @@ export class ImageAddon implements ITerminalAddon {
   private _options: Required<ImageAddonOptions>
   private _imageContainer: HTMLElement | undefined
   private _pendingImages: Map<number, PendingImage> = new Map()
+  private _scrollDisposable: IDisposable | undefined
+  private _cachedCellHeight: number = 16
 
   constructor(options: ImageAddonOptions = {}) {
     this._options = {
@@ -52,6 +54,22 @@ export class ImageAddon implements ITerminalAddon {
     // Create image container overlay
     this._createImageContainer()
 
+    // Cache initial cell height
+    this._updateCachedCellHeight()
+
+    // Add scroll listener for lazy image position updates
+    this._scrollDisposable = terminal.onScroll(() => {
+      this._updateImagePositions()
+    })
+
+    // Add resize listener to update cached cell height
+    this._disposables.push(
+      terminal.onResize(() => {
+        this._updateCachedCellHeight()
+        this._updateImagePositions()
+      })
+    )
+
     if (this._options.enableItermProtocol) {
       this._setupItermProtocol()
     }
@@ -64,6 +82,8 @@ export class ImageAddon implements ITerminalAddon {
   public dispose(): void {
     this._disposables.forEach(d => d.dispose())
     this._disposables.length = 0
+    this._scrollDisposable?.dispose()
+    this._scrollDisposable = undefined
     this._terminal = undefined
 
     if (this._imageContainer && this._imageContainer.parentNode) {
@@ -149,6 +169,14 @@ export class ImageAddon implements ITerminalAddon {
     if (screen && screen.parentNode) {
       screen.parentNode.insertBefore(this._imageContainer, screen.nextSibling)
     }
+  }
+
+  private _updateCachedCellHeight(): void {
+    if (!this._terminal) return
+    
+    this._cachedCellHeight = this._terminal.rows > 0
+      ? (this._terminal.element?.clientHeight || 400) / this._terminal.rows
+      : 16
   }
 
   private _setupItermProtocol(): void {
@@ -271,9 +299,6 @@ export class ImageAddon implements ITerminalAddon {
 
     // Add to container
     this._imageContainer.appendChild(img)
-
-    // Handle terminal scroll to update image positions
-    this._updateImagePositions()
   }
 
   private _removeImageElement(markerId: number): void {
@@ -286,9 +311,8 @@ export class ImageAddon implements ITerminalAddon {
   private _updateImagePositions(): void {
     if (!this._terminal || !this._imageContainer) return
 
-    const cellHeight = this._terminal.rows > 0
-      ? (this._terminal.element?.clientHeight || 400) / this._terminal.rows
-      : 16
+    // Use cached cell height instead of recalculating
+    const cellHeight = this._cachedCellHeight
 
     this._pendingImages.forEach((image, markerId) => {
       const img = this._imageContainer!.querySelector(`#xterm-image-${markerId}`) as HTMLElement
