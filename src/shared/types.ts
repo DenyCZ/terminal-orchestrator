@@ -24,6 +24,15 @@ export interface ShellDefinition {
 
 export type TerminalStatus = 'idle' | 'running' | 'stopped' | 'completed' | 'error';
 
+// Predefined terminal configuration
+export interface PredefinedTerminal {
+  id: string;
+  name: string;           // Display name (e.g., "OpenCode")
+  command: string;        // Command to run (e.g., "opencode")
+  shellType?: ShellType;  // Optional: override default shell
+  keybinding?: KeyBinding;   // Shortcut to spawn this terminal
+}
+
 // Web UI Settings for mobile access
 export interface WebUISettings {
   enabled: boolean;
@@ -80,6 +89,7 @@ export interface Terminal {
   pid?: number;
   createdAt: number;
   updatedAt: number;
+  openCodeSessionId?: string;  // Set when opencode is detected running in this terminal
 }
 
 export interface ProjectGroup {
@@ -107,6 +117,7 @@ export interface AppSettings {
   theme: 'dark' | 'light';
   keyboardShortcuts?: ShortcutConfig;
   webUI?: WebUISettings;
+  predefinedTerminals?: PredefinedTerminal[];
 }
 
 // All available shortcuts with their definitions
@@ -253,7 +264,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     pin: '',
     allowRemote: false,
     showQRCode: true
-  }
+  },
+  predefinedTerminals: []
 };
 
 export const DEFAULT_CONFIG: AppConfig = {
