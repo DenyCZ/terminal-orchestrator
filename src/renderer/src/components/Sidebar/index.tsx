@@ -417,7 +417,7 @@ function ProjectItem({
       </div>
       
       {isExpanded && (
-        <div className={`mt-1 ${isInGroup ? 'ml-8' : 'ml-4'}`}>
+        <div className="mt-1" style={{ marginLeft: isInGroup ? '32px' : '16px' }}>
           {terminals.map(terminal => (
             <TerminalItem
               key={terminal.id}
@@ -603,7 +603,7 @@ function GroupItem({
       </div>
       
       {isExpanded && (
-        <div className="ml-2 mt-1">
+        <div className="mt-1" style={{ marginLeft: '24px' }}>
           {projects.map(project => (
             <ProjectItem
               key={project.id}
