@@ -1,6 +1,6 @@
 import { useEffect, useCallback } from 'react'
 import { useAppStore } from '../store'
-import { DEFAULT_SHORTCUTS, type KeyBinding, type PredefinedTerminal } from '@shared/types'
+import { DEFAULT_SHORTCUTS, type KeyBinding, type PredefinedTerminal, type ShortcutId } from '@shared/types'
 
 export interface KeyboardShortcut {
   key: string;
@@ -128,83 +128,32 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
       return;
     }
     
-    // Check all other shortcuts dynamically
-    if (matchesBinding(event, shortcuts.nextTerminal)) {
-      event.preventDefault();
-      onNextTerminal();
-      return;
+    // Lookup table for standard shortcuts
+    const shortcutActions: Record<ShortcutId, (() => void) | undefined> = {
+      openCommandPalette: undefined, // Handled above
+      closeCommandPalette: undefined, // Handled above
+      nextTerminal: onNextTerminal,
+      prevTerminal: onPrevTerminal,
+      runTerminal: onRunTerminal,
+      restartTerminal: onRestartTerminal,
+      killTerminal: onKillTerminal,
+      newTerminal: onNewTerminal,
+      newProject: onNewProject,
+      newWorktree: onNewWorktree,
+      switchProject: onSwitchProject,
+      switchTerminal: onSwitchTerminal,
+      clearTerminal: onClearTerminal,
+      focusTerminal: onFocusTerminal,
+      openHelp: onOpenHelp,
     }
 
-    if (matchesBinding(event, shortcuts.prevTerminal)) {
-      event.preventDefault();
-      onPrevTerminal();
-      return;
-    }
-
-    if (matchesBinding(event, shortcuts.runTerminal)) {
-      event.preventDefault();
-      onRunTerminal();
-      return;
-    }
-
-    if (matchesBinding(event, shortcuts.restartTerminal)) {
-      event.preventDefault();
-      onRestartTerminal();
-      return;
-    }
-
-    if (matchesBinding(event, shortcuts.killTerminal)) {
-      event.preventDefault();
-      onKillTerminal();
-      return;
-    }
-
-    if (matchesBinding(event, shortcuts.newWorktree)) {
-      event.preventDefault();
-      onNewWorktree?.();
-      return;
-    }
-
-    if (matchesBinding(event, shortcuts.switchProject)) {
-      event.preventDefault();
-      onSwitchProject();
-      return;
-    }
-
-    if (matchesBinding(event, shortcuts.switchTerminal)) {
-      event.preventDefault();
-      onSwitchTerminal();
-      return;
-    }
-
-    if (matchesBinding(event, shortcuts.newTerminal)) {
-      event.preventDefault();
-      onNewTerminal();
-      return;
-    }
-
-    if (matchesBinding(event, shortcuts.newProject)) {
-      event.preventDefault();
-      onNewProject();
-      return;
-    }
-
-    if (matchesBinding(event, shortcuts.clearTerminal)) {
-      event.preventDefault();
-      onClearTerminal?.();
-      return;
-    }
-
-    if (matchesBinding(event, shortcuts.focusTerminal)) {
-      event.preventDefault();
-      onFocusTerminal?.();
-      return;
-    }
-
-    if (matchesBinding(event, shortcuts.openHelp)) {
-      event.preventDefault();
-      onOpenHelp?.();
-      return;
+    // Check standard shortcuts using lookup table
+    for (const [id, action] of Object.entries(shortcutActions)) {
+      if (action && matchesBinding(event, shortcuts[id as ShortcutId])) {
+        event.preventDefault()
+        action()
+        return
+      }
     }
 
     // Check predefined terminal shortcuts (only when not in input field)

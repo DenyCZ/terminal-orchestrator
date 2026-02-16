@@ -18,6 +18,7 @@ import type {
   OpenCodeWatcherStatus,
   OpenCodeSSEEvent 
 } from './types'
+import { tryOrNull, withErrorLog } from '../utils/error-handler'
 
 // Event subscriber type
 type SessionChangeListener = (sessions: Map<string, OpenCodeSessionInfo>) => void
@@ -223,16 +224,10 @@ export class OpenCodeSessionWatcher {
       }
       
       es.onmessage = (event: MessageEvent) => {
-        try {
-          const data: OpenCodeSSEEvent = JSON.parse(event.data)
-          
-          // Refresh on session events
-          if (data.type?.startsWith('session.')) {
-            console.log('[OpenCode] SSE event:', data.type)
-            this.refreshSessions()
-          }
-        } catch (e) {
-          // Ignore parse errors
+        const data = tryOrNull(() => JSON.parse(event.data) as OpenCodeSSEEvent)
+        if (data?.type?.startsWith('session.')) {
+          console.log('[OpenCode] SSE event:', data.type)
+          this.refreshSessions()
         }
       }
       
@@ -301,7 +296,7 @@ export class OpenCodeSessionWatcher {
   private loadFromSQLite(): OpenCodeSessionInfo[] {
     if (!this.db) return []
     
-    try {
+    return withErrorLog(() => {
       const rows = this.db.prepare(`
         SELECT 
           id, 
@@ -319,11 +314,7 @@ export class OpenCodeSessionWatcher {
         directory: row.directory,
         updatedAt: row.time_updated
       }))
-      
-    } catch (error) {
-      console.warn('[OpenCode] SQLite query failed:', error)
-      return []
-    }
+    }, [], 'OpenCode SQLite query')
   }
   
   /**
@@ -345,17 +336,13 @@ export class OpenCodeSessionWatcher {
         
         proc.on('close', (code) => {
           if (code === 0 && output.trim()) {
-            try {
-              const sessions = JSON.parse(output)
-              resolve(sessions.map((s: any) => ({
-                id: s.id,
-                title: s.title,
-                directory: s.directory,
-                updatedAt: s.updated
-              })))
-            } catch {
-              resolve([])
-            }
+            const sessions = tryOrNull(() => JSON.parse(output))
+            resolve(sessions?.map((s: any) => ({
+              id: s.id,
+              title: s.title,
+              directory: s.directory,
+              updatedAt: s.updated
+            })) || [])
           } else {
             resolve([])
           }
@@ -379,12 +366,7 @@ export class OpenCodeSessionWatcher {
    * Normalize path for comparison
    */
   private normalizePath(p: string): string {
-    try {
-      // Resolve and lowercase for Windows
-      return path.resolve(p).toLowerCase()
-    } catch {
-      return p.toLowerCase()
-    }
+    return withErrorLog(() => path.resolve(p).toLowerCase(), p.toLowerCase(), 'Path resolve')
   }
   
   /**

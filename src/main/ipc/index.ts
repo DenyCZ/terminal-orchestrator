@@ -10,6 +10,7 @@ import { WebUIManager } from '../web-ui-manager'
 import { detectShells } from '../shell-detector'
 import { getOpenCodeWatcher } from '../opencode'
 import { startTerminalProcess, normalizeDirectory } from '../terminal-helpers'
+import { withErrorLogAsync } from '../utils/error-handler'
 import * as fs from 'fs'
 import * as path from 'path'
 
@@ -238,7 +239,7 @@ export function setupIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.FS_READ_DIR, async (_, options: ReadDirOptions): Promise<FileEntry[]> => {
     const { path: dirPath } = options
     
-    try {
+    return withErrorLogAsync(async () => {
       const entries = await fs.promises.readdir(dirPath, { withFileTypes: true })
       
       const fileEntries: FileEntry[] = await Promise.all(
@@ -270,10 +271,7 @@ export function setupIpcHandlers(): void {
         }
         return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
       })
-    } catch (error) {
-      console.error(`Failed to read directory ${dirPath}:`, error)
-      return []
-    }
+    }, [], `FS read dir ${dirPath}`)
   })
 
   const webUIManager = WebUIManager.getInstance()

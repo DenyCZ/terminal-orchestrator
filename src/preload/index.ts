@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC_CHANNELS } from '@shared/ipc'
 import type { TerminalDataBatch, TerminalExitEvent, PtyConfig, WorktreeCreateOptions, WorktreeCreateResult, GitBranch, WebUIStatus, FileEntry, ReadDirOptions, OpenCodeSessionInfo, OpenCodeWatcherStatus, OpenCodeSessionEvent } from '@shared/ipc'
 import type { Project, ProjectGroup, Terminal, AppConfig, AppSettings, DetectedShell, ShellType } from '@shared/types'
@@ -157,7 +157,10 @@ const electronAPI = {
   },
 
   // Initialize main window reference
-  init: (): void => ipcRenderer.send('set-main-window')
+  init: (): void => ipcRenderer.send('set-main-window'),
+
+  // File path utilities (needed for drag-and-drop in Electron 32+)
+  getPathForFile: (file: File): string => webUtils.getPathForFile(file)
 }
 
 declare global {

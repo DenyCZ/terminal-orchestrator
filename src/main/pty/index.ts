@@ -30,61 +30,43 @@ interface PtySession {
   pid: number
 }
 
-// Data batcher for performance optimization
-class DataBatcher {
-  private buffers: Map<string, string[]> = new Map()
-  private timers: Map<string, NodeJS.Timeout> = new Map()
-  private readonly batchInterval = 16 // ~60fps
-  private window: BrowserWindow | null = null
+// Functional data batcher for performance optimization
+const createDataBatcher = (batchInterval = 16) => {
+  const buffers = new Map<string, string[]>()
+  const timers = new Map<string, NodeJS.Timeout>()
+  let window: BrowserWindow | null = null
 
-  setWindow(window: BrowserWindow): void {
-    this.window = window
-  }
-
-  queueData(terminalId: string, data: string): void {
-    if (!this.buffers.has(terminalId)) {
-      this.buffers.set(terminalId, [])
-    }
-
-    this.buffers.get(terminalId)!.push(data)
-
-    if (!this.timers.has(terminalId)) {
-      const timer = setTimeout(() => {
-        this.flush(terminalId)
-      }, this.batchInterval)
-      this.timers.set(terminalId, timer)
-    }
-  }
-
-  private flush(terminalId: string): void {
-    const buffer = this.buffers.get(terminalId)
-    if (buffer && buffer.length > 0 && this.window && !this.window.isDestroyed()) {
-      const combined = buffer.join('')
-      this.buffers.delete(terminalId)
-      this.timers.delete(terminalId)
-      
-      this.window.webContents.send('terminal:data', {
+  const flush = (terminalId: string) => {
+    const buffer = buffers.get(terminalId)
+    if (buffer && buffer.length > 0 && window && !window.isDestroyed()) {
+      window.webContents.send('terminal:data', {
         terminalId,
-        data: combined
+        data: buffer.join('')
       })
     }
+    buffers.delete(terminalId)
+    timers.delete(terminalId)
   }
 
-  clear(terminalId: string): void {
-    const timer = this.timers.get(terminalId)
-    if (timer) {
-      clearTimeout(timer)
-      this.timers.delete(terminalId)
+  return {
+    setWindow: (w: BrowserWindow) => { window = w },
+    queueData: (terminalId: string, data: string) => {
+      buffers.set(terminalId, [...(buffers.get(terminalId) || []), data])
+      if (!timers.has(terminalId)) {
+        timers.set(terminalId, setTimeout(() => flush(terminalId), batchInterval))
+      }
+    },
+    clear: (terminalId: string) => {
+      const timer = timers.get(terminalId)
+      if (timer) clearTimeout(timer)
+      buffers.delete(terminalId)
+      timers.delete(terminalId)
+    },
+    clearAll: () => {
+      timers.forEach(t => clearTimeout(t))
+      timers.clear()
+      buffers.clear()
     }
-    this.buffers.delete(terminalId)
-  }
-
-  clearAll(): void {
-    for (const timer of this.timers.values()) {
-      clearTimeout(timer)
-    }
-    this.timers.clear()
-    this.buffers.clear()
   }
 }
 
@@ -214,13 +196,13 @@ async function createPty(
 export class PtyManager {
   private static instance: PtyManager
   private sessions: Map<string, PtySession> = new Map()
-  private batcher: DataBatcher
+  private batcher: ReturnType<typeof createDataBatcher>
   private window: BrowserWindow | null = null
   private ptyAvailable: boolean | null = null
   private wsServer: ITerminalDataBroadcaster | null = null
 
   private constructor() {
-    this.batcher = new DataBatcher()
+    this.batcher = createDataBatcher()
     this.checkPtyAvailability()
   }
   

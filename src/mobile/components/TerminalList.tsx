@@ -45,8 +45,13 @@ export function TerminalList({ project, onSelect, onBack, onTerminalCreated, api
     workingDirectory: string,
     startupCommand?: string
   ) => {
-    await api.createTerminal(project.id, name, shellType, workingDirectory, startupCommand)
-    onTerminalCreated?.()
+    try {
+      await api.createTerminal(project.id, name, shellType, workingDirectory, startupCommand)
+      onTerminalCreated?.()
+    } catch (error) {
+      console.error('Failed to create terminal:', error)
+      // Could add user-facing error notification here
+    }
   }
   
   return (

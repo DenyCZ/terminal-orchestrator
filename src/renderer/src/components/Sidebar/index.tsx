@@ -4,6 +4,7 @@ import type { Project, ProjectGroup, Terminal } from '@shared/types'
 
 interface SidebarProps {
   onOpenSettings?: () => void
+  onNewProject?: () => void
 }
 
 // Context menu position type
@@ -416,7 +417,7 @@ function ProjectItem({
       </div>
       
       {isExpanded && (
-        <div className="ml-4 mt-1">
+        <div className={`mt-1 ${isInGroup ? 'ml-8' : 'ml-4'}`}>
           {terminals.map(terminal => (
             <TerminalItem
               key={terminal.id}
@@ -628,7 +629,7 @@ function GroupItem({
   )
 }
 
-export default function Sidebar({ onOpenSettings }: SidebarProps) {
+export default function Sidebar({ onOpenSettings, onNewProject }: SidebarProps) {
   const { groups, projects, createProject, createTerminal, updateTerminal, deleteTerminal, createGroup, reorderProjects } = useAppStore()
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set())
@@ -852,9 +853,10 @@ export default function Sidebar({ onOpenSettings }: SidebarProps) {
   }
 
   const handleStart = () => {
-    if (contextMenu.terminalId && contextMenu.projectId) {
+    const { terminalId, projectId } = contextMenu
+    if (terminalId && projectId) {
       const { startTerminal } = useAppStore.getState()
-      startTerminal(contextMenu.projectId!, contextMenu.terminalId!)
+      startTerminal(projectId, terminalId)
     }
   }
 
@@ -881,18 +883,25 @@ export default function Sidebar({ onOpenSettings }: SidebarProps) {
     const files = e.dataTransfer.files
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
-      const path = (file as any).path || file.name
-      if (path) {
-        const folderName = path.split(/[\\/]/).pop() || 'New Project'
-        const project = await createProject(folderName, path)
-        await createTerminal(
-          project.id,
-          'Terminal 1',
-          'powershell',
-          path
-        )
-        setExpandedProjects(prev => new Set([...prev, project.id]))
+      
+      // Use Electron's webUtils.getPathForFile to get the full path (required in Electron 32+)
+      const filePath = window.electronAPI?.getPathForFile?.(file)
+      
+      if (!filePath) {
+        console.error('Unable to get file path from dropped item', file)
+        alert('Unable to get full path for dropped item. Please try again or use the "New Project" button.')
+        continue
       }
+      
+      const folderName = filePath.split(/[\\/]/).pop() || 'New Project'
+      const project = await createProject(folderName, filePath)
+      await createTerminal(
+        project.id,
+        'Terminal 1',
+        'powershell',
+        filePath
+      )
+      setExpandedProjects(prev => new Set([...prev, project.id]))
     }
   }
 
@@ -1003,9 +1012,8 @@ export default function Sidebar({ onOpenSettings }: SidebarProps) {
         </button>
         
         <button
-          onClick={async () => {
-            const project = await createProject('New Project')
-            setExpandedProjects(prev => new Set([...prev, project.id]))
+          onClick={() => {
+            onNewProject?.()
           }}
           className="w-full py-2 px-3 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium transition-colors"
         >

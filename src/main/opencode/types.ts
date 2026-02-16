@@ -5,6 +5,9 @@
  * Repository: https://github.com/anomalyco/opencode
  */
 
+// Re-export shared types for convenience
+export type { OpenCodeSessionInfo, OpenCodeWatcherStatus } from '@shared/ipc'
+
 // OpenCode session as stored in SQLite
 export interface OpenCodeSession {
   id: string                    // e.g., "ses_abc123..."
@@ -24,14 +27,6 @@ export interface OpenCodeSession {
   time_archived?: number
 }
 
-// Simplified session info for sidebar display
-export interface OpenCodeSessionInfo {
-  id: string
-  title: string
-  directory: string
-  updatedAt: number
-}
-
 // SSE Event types from OpenCode
 export type OpenCodeEventType = 
   | 'server.connected'
@@ -45,17 +40,8 @@ export type OpenCodeEventType =
 export interface OpenCodeSSEEvent {
   type: OpenCodeEventType
   properties: {
-    info?: OpenCodeSessionInfo
+    info?: import('@shared/ipc').OpenCodeSessionInfo
     sessionID?: string
     error?: string
   }
-}
-
-// Watcher status for debugging
-export interface OpenCodeWatcherStatus {
-  sqliteConnected: boolean
-  sseConnected: boolean
-  pollingActive: boolean
-  sessionCount: number
-  lastUpdate: number | null
 }

@@ -226,7 +226,7 @@ function App() {
     if (promptMode === 'new-terminal') {
       const projectId = activeProjectId || projects[0]?.id
       if (projectId) {
-        const cwd = activeProject?.rootDirectory || values.path || ''
+        const cwd = values.path || activeProject?.rootDirectory || ''
         await createTerminal(
           projectId,
           values.name || 'New Terminal',
@@ -291,7 +291,7 @@ function App() {
             { value: 'cmd', label: 'Command Prompt' }
           ]
     },
-    { key: 'path', label: 'Path', type: 'text', placeholder: activeProject?.rootDirectory || 'Working directory' },
+    { key: 'path', label: 'Path', type: 'text', placeholder: 'Working directory', defaultValue: activeProject?.rootDirectory || '' },
     { key: 'command', label: 'Command', type: 'text', placeholder: 'Startup command (optional)' }
   ], [settings.defaultShell, availableShells, activeProject?.rootDirectory])
 
@@ -330,7 +330,7 @@ function App() {
       {/* Main layout */}
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <Sidebar onOpenSettings={handleOpenSettings} />
+        <Sidebar onOpenSettings={handleOpenSettings} onNewProject={handleNewProject} />
         
         {/* Main content area */}
         <div className="flex-1 flex flex-col overflow-hidden">

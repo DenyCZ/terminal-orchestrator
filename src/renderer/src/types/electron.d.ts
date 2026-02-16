@@ -78,6 +78,9 @@ export interface ElectronAPI {
   }
   
   init: () => void
+  
+  // File path utilities (needed for drag-and-drop in Electron 32+)
+  getPathForFile: (file: File) => string
 }
 
 declare global {

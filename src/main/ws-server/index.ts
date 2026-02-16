@@ -5,6 +5,16 @@ import type { PtyManager } from '../pty';
 import type { WebSocketMessage, TerminalSession } from './types';
 import type { TerminalStatus } from '@shared/types';
 
+/**
+ * Safely extract remote address from WebSocket
+ * The _socket property is internal to ws library but stable
+ */
+function getRemoteAddress(ws: WebSocket): string {
+  // Access internal socket - this is stable in ws library
+  const socket = (ws as { _socket?: { remoteAddress?: string } })._socket
+  return socket?.remoteAddress || 'unknown'
+}
+
 export class WebSocketTerminalServer {
   private wss?: WebSocketServer;
   private store: ConfigStore;
@@ -109,7 +119,7 @@ export class WebSocketTerminalServer {
     }
     
     // Create session key
-    const sessionKey = `${(ws as any)._socket?.remoteAddress || 'unknown'}_${terminalId}`;
+    const sessionKey = `${getRemoteAddress(ws)}_${terminalId}`;
     
     // Create session
     const session: TerminalSession = {
@@ -135,7 +145,7 @@ export class WebSocketTerminalServer {
   }
   
   private unsubscribeFromTerminal(ws: WebSocket, terminalId: string): void {
-    const sessionKey = `${(ws as any)._socket?.remoteAddress || 'unknown'}_${terminalId}`;
+    const sessionKey = `${getRemoteAddress(ws)}_${terminalId}`;
     const session = this.sessions.get(sessionKey);
     
     if (session) {

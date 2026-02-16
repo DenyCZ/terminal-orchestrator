@@ -50,7 +50,8 @@ function TerminalView({
   const clipboardAddonRef = useRef<ClipboardAddon | null>(null)
   const imageAddonRef = useRef<ImageAddon | null>(null)
   const hasStartedRef = useRef(false)
-  const { startTerminal, stopTerminal, restartTerminal } = useAppStore()
+  const { startTerminal, stopTerminal, restartTerminal, projects } = useAppStore()
+  const project = projects.find(p => p.id === projectId)
   
   // Performance optimization refs
   const isUserAtBottomRef = useRef(true)
@@ -298,12 +299,14 @@ function TerminalView({
 
   // Handle resize when file explorer visibility/width changes
   useEffect(() => {
-    if (terminalRef.current && fitAddonRef.current) {
+    const terminalInstance = terminalRef.current
+    const fitAddon = fitAddonRef.current
+    if (terminalInstance && fitAddon) {
       // Use requestAnimationFrame for smoother resize
       requestAnimationFrame(() => {
-        fitAddonRef.current?.fit()
-        // Notify PTY of resize
-        const { cols, rows } = terminalRef.current!
+        fitAddon.fit()
+        // Notify PTY of resize - terminalInstance is captured above, safe to use
+        const { cols, rows } = terminalInstance
         window.electronAPI?.terminal.resize(terminal.id, cols, rows)
       })
     }
@@ -347,7 +350,15 @@ function TerminalView({
       {/* Terminal header */}
       <div className="flex items-center justify-between px-4 py-2 bg-sidebar-bg border-b border-border-color">
         <div className="flex items-center gap-2">
+          {project && (
+            <>
+              <span className="font-medium text-blue-400">{project.name}</span>
+              <span className="text-xs text-gray-500" title={project.rootDirectory}>{project.rootDirectory}</span>
+              <span className="text-gray-500">›</span>
+            </>
+          )}
           <span className="font-medium">{terminal.name}</span>
+          <span className="text-xs text-gray-500" title={terminal.workingDirectory}>{terminal.workingDirectory}</span>
           <span className="text-xs text-gray-500">({terminal.shellType})</span>
           <span 
             className={`text-xs px-2 py-0.5 rounded ${
