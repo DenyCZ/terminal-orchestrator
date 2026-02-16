@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, memo } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
@@ -36,7 +36,7 @@ function FileIcon({ entry }: { entry: FileEntry }) {
   return <span>{iconMap[ext] || '📄'}</span>
 }
 
-export default function TerminalView({
+function TerminalView({
   terminal,
   projectId,
   onOpenCommandPalette,
@@ -54,10 +54,7 @@ export default function TerminalView({
   
   // Performance optimization refs
   const isUserAtBottomRef = useRef(true)
-  const writeBufferRef = useRef<string[]>([])
-  const bufferTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const scrollDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const writeInterval = 16 // Match backend batch rate
   
   // File explorer state
   const [showFileExplorer, setShowFileExplorer] = useState(false)
@@ -92,23 +89,33 @@ export default function TerminalView({
     }, 50)
   }, [])
 
-  // Write buffer functions for performance
+  // Write buffer functions for performance - uses requestAnimationFrame for visual smoothness
+  const pendingWritesRef = useRef<string[]>([])
+  const rafPendingRef = useRef<boolean>(false)
+  
   const flushWriteBuffer = useCallback(() => {
-    if (writeBufferRef.current.length > 0 && terminalRef.current) {
-      terminalRef.current.write(writeBufferRef.current.join(''))
-      writeBufferRef.current = []
-      bufferTimerRef.current = null
+    if (pendingWritesRef.current.length > 0 && terminalRef.current) {
+      // Combine all pending writes
+      const data = pendingWritesRef.current.join('')
+      pendingWritesRef.current = []
+      
+      // Write to terminal
+      terminalRef.current.write(data)
+      
+      // Trigger scroll
       scrollToBottomDebounced()
     }
+    rafPendingRef.current = false
   }, [scrollToBottomDebounced])
 
   const queueWrite = useCallback((data: string) => {
-    writeBufferRef.current.push(data)
+    pendingWritesRef.current.push(data)
     
-    if (!bufferTimerRef.current) {
-      bufferTimerRef.current = setTimeout(() => {
+    if (!rafPendingRef.current) {
+      rafPendingRef.current = true
+      requestAnimationFrame(() => {
         flushWriteBuffer()
-      }, writeInterval)
+      })
     }
   }, [flushWriteBuffer])
 
@@ -274,12 +281,9 @@ export default function TerminalView({
         scrollDebounceTimerRef.current = null
       }
       
-      // Clear write buffer timer
-      if (bufferTimerRef.current) {
-        clearTimeout(bufferTimerRef.current)
-        bufferTimerRef.current = null
-      }
-      writeBufferRef.current = []
+      // Clear pending writes
+      pendingWritesRef.current = []
+      rafPendingRef.current = false
       
       clearTimeout(resizeTimeout)
       resizeObserver.disconnect()
@@ -461,3 +465,17 @@ export default function TerminalView({
     </div>
   )
 }
+
+// Memoize TerminalView to prevent unnecessary re-renders
+// Only re-render if terminal identity or status changes, or if callbacks change
+export default memo(TerminalView, (prevProps, nextProps) => {
+  return (
+    prevProps.terminal.id === nextProps.terminal.id &&
+    prevProps.terminal.status === nextProps.terminal.status &&
+    prevProps.projectId === nextProps.projectId &&
+    prevProps.onOpenCommandPalette === nextProps.onOpenCommandPalette &&
+    prevProps.onNextTerminal === nextProps.onNextTerminal &&
+    prevProps.onPrevTerminal === nextProps.onPrevTerminal &&
+    prevProps.onNewTerminal === nextProps.onNewTerminal
+  )
+})

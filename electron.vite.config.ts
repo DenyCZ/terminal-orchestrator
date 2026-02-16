@@ -35,7 +35,15 @@ export default defineConfig({
   },
   renderer: {
     root: resolve(__dirname, 'src/renderer'),
-    plugins: [react()],
+    plugins: [
+      react({
+        babel: {
+          plugins: [
+            ['babel-plugin-react-compiler', { runtimeModule: 'react-compiler-runtime' }]
+          ]
+        }
+      })
+    ],
     build: {
       rollupOptions: {
         input: {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, memo } from 'react'
 import type { FileEntry } from '@shared/ipc'
 
 interface FileTreeProps {
@@ -57,15 +57,15 @@ function FileIcon({ entry }: { entry: FileEntry }) {
 }
 
 // Tree node component
-function TreeNode({ 
-  entry, 
+function TreeNode({
+  entry,
   depth = 0,
   onFileClick,
   onFolderClick,
   expandedPaths,
   toggleExpand,
   loadChildren
-}: { 
+}: {
   entry: FileEntry
   depth?: number
   onFileClick?: (file: FileEntry) => void
@@ -141,7 +141,7 @@ function TreeNode({
   )
 }
 
-export default function FileTree({ rootPath, onFileClick, onFolderClick }: FileTreeProps) {
+function FileTree({ rootPath, onFileClick, onFolderClick }: FileTreeProps) {
   const [rootEntries, setRootEntries] = useState<FileEntry[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -299,3 +299,6 @@ export default function FileTree({ rootPath, onFileClick, onFolderClick }: FileT
     </div>
   )
 }
+
+// Memoize FileTree to prevent unnecessary re-renders when parent updates
+export default memo(FileTree)

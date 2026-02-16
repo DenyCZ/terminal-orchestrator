@@ -1,13 +1,18 @@
-import Store from 'electron-store'
+import _Store from 'electron-store'
+// ESM/CJS interop: electron-store v11+ is ESM-only, bundled as { default: Store }
+const Store = (_Store as any).default || _Store
 import type { AppConfig, Project, ProjectGroup, Terminal, ShellType } from '@shared/types'
 import { DEFAULT_CONFIG } from '@shared/types'
 import { v4 as uuid } from 'uuid'
+import fs from 'fs'
+import path from 'path'
+import os from 'os'
 
 const STORE_KEY = 'terminal-orchestrator-config'
 
 export class ConfigStore {
   private static instance: ConfigStore
-  private store: Store
+  private store: InstanceType<typeof Store>
 
   private constructor() {
     this.store = new Store({
@@ -206,6 +211,34 @@ export class ConfigStore {
   }
 
   // Terminal operations
+  private ensureValidWorkingDirectory(workingDirectory: string): string {
+    // If empty or not provided, use home directory
+    if (!workingDirectory || workingDirectory.trim() === '') {
+      console.warn('Empty workingDirectory provided, using home directory')
+      return os.homedir()
+    }
+
+    // Resolve to absolute path
+    const resolvedPath = path.resolve(workingDirectory)
+
+    // Check if path exists
+    if (!fs.existsSync(resolvedPath)) {
+      console.warn(`workingDirectory does not exist: "${workingDirectory}", using home directory`)
+      return os.homedir()
+    }
+
+    // Check if it's a directory
+    const stats = fs.statSync(resolvedPath)
+    if (!stats.isDirectory()) {
+      const parentDir = path.dirname(resolvedPath)
+      console.warn(`workingDirectory is not a directory: "${workingDirectory}", using parent: "${parentDir}"`)
+      // Recursively validate parent directory
+      return this.ensureValidWorkingDirectory(parentDir)
+    }
+
+    return resolvedPath
+  }
+
   createTerminal(
     projectId: string,
     name: string,
@@ -218,13 +251,16 @@ export class ConfigStore {
     
     if (projectIndex === -1) return undefined
 
+    // Validate working directory before saving
+    const validWorkingDirectory = this.ensureValidWorkingDirectory(workingDirectory)
+
     const now = Date.now()
     const terminal: Terminal = {
       id: uuid(),
       projectId,
       name,
       shellType,
-      workingDirectory,
+      workingDirectory: validWorkingDirectory,
       startupCommand,
       status: 'idle',
       createdAt: now,

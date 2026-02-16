@@ -2,7 +2,8 @@ import { create } from 'zustand'
 import { v4 as uuid } from 'uuid'
 import type { Project, ProjectGroup, Terminal, AppConfig, ShortcutConfig, KeyBinding, ShellType, PredefinedTerminal } from '@shared/types'
 import { DEFAULT_SHORTCUTS, DEFAULT_SETTINGS } from '@shared/types'
-import type { TerminalDataBatch, OpenCodeSessionInfo, OpenCodeWatcherStatus } from '@shared/ipc'
+import type { OpenCodeSessionInfo, OpenCodeWatcherStatus } from '@shared/ipc'
+import { normalizeDirectory } from '@shared/utils'
 
 interface AppState {
   // Data
@@ -97,11 +98,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       })
       
       // Setup terminal event listeners
-      window.electronAPI.terminal.onData((_data: TerminalDataBatch) => {
-        // Terminal data is handled by TerminalView component
-        // This is just for potential future use
-      })
-      
       window.electronAPI.terminal.onExit((event) => {
         const { projects } = get()
         for (const project of projects) {
@@ -128,11 +124,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       window.electronAPI.opencode.onEvent((event) => {
         if (event.type === 'sessions-updated' && event.sessions) {
           const sessionMap = new Map<string, OpenCodeSessionInfo>()
-          event.sessions.forEach(s => {
-            // Normalize directory path for lookup
-            const normalizedDir = s.directory.toLowerCase().replace(/\\/g, '/')
-            sessionMap.set(normalizedDir, s)
-          })
+          event.sessions.forEach(s => sessionMap.set(normalizeDirectory(s.directory), s))
           set({ openCodeSessions: sessionMap })
         } else if (event.type === 'status-changed' && event.status) {
           set({ openCodeStatus: event.status })
@@ -142,10 +134,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       // Load initial OpenCode sessions
       const sessions = await window.electronAPI.opencode.getSessions()
       const sessionMap = new Map<string, OpenCodeSessionInfo>()
-      sessions.forEach(s => {
-        const normalizedDir = s.directory.toLowerCase().replace(/\\/g, '/')
-        sessionMap.set(normalizedDir, s)
-      })
+      sessions.forEach(s => sessionMap.set(normalizeDirectory(s.directory), s))
       set({ openCodeSessions: sessionMap })
       
       // Load initial OpenCode status
@@ -468,7 +457,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   
   // OpenCode session helpers
   getOpenCodeSession: (directory: string): OpenCodeSessionInfo | null => {
-    const normalizedDir = directory.toLowerCase().replace(/\\/g, '/')
-    return get().openCodeSessions.get(normalizedDir) || null
+    return get().openCodeSessions.get(normalizeDirectory(directory)) || null
   }
 }))

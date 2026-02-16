@@ -1,6 +1,9 @@
 import { BrowserWindow } from 'electron'
 import { spawn, ChildProcess } from 'child_process'
 import { v4 as uuid } from 'uuid'
+import fs from 'fs'
+import path from 'path'
+import os from 'os'
 import type { ShellType, TerminalStatus } from '@shared/types'
 import type { PtyConfig } from '@shared/ipc'
 
@@ -142,11 +145,43 @@ interface PtySpawnOptions {
   encoding?: string
 }
 
+function validateCwd(cwd: string): string {
+  // If cwd is empty or not provided, use home directory
+  if (!cwd || cwd.trim() === '') {
+    console.warn('Empty cwd provided, using home directory')
+    return os.homedir()
+  }
+
+  // Resolve to absolute path
+  const resolvedPath = path.resolve(cwd)
+
+  // Check if path exists
+  if (!fs.existsSync(resolvedPath)) {
+    console.warn(`Cwd does not exist: "${cwd}", using home directory`)
+    return os.homedir()
+  }
+
+  // Check if it's a directory
+  const stats = fs.statSync(resolvedPath)
+  if (!stats.isDirectory()) {
+    console.warn(`Cwd is not a directory: "${cwd}", using parent directory`)
+    const parentDir = path.dirname(resolvedPath)
+    // Recursively validate parent directory
+    return validateCwd(parentDir)
+  }
+
+  return resolvedPath
+}
+
 async function createPty(
   shell: string,
   args: string[],
   options: { cols: number; rows: number; cwd: string; env: Record<string, string> }
 ): Promise<IPty> {
+  // Validate and normalize cwd before passing to node-pty
+  const validCwd = validateCwd(options.cwd)
+  console.log(`Creating PTY with cwd: "${validCwd}" (original: "${options.cwd}")`)
+
   try {
     const pty = await import('node-pty')
 
@@ -154,7 +189,7 @@ async function createPty(
       name: 'xterm-256color',
       cols: options.cols,
       rows: options.rows,
-      cwd: options.cwd,
+      cwd: validCwd,
       env: options.env
     }
 
@@ -167,7 +202,7 @@ async function createPty(
     console.warn('node-pty not available, falling back to child_process:', error)
 
     const proc = spawn(shell, args, {
-      cwd: options.cwd,
+      cwd: validCwd,
       env: options.env,
       stdio: ['pipe', 'pipe', 'pipe']
     })

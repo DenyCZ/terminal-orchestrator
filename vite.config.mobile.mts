@@ -5,7 +5,15 @@ import react from '@vitejs/plugin-react'
 // Mobile Web UI build configuration
 // This builds the React mobile app that will be served by the Express server
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react({
+      babel: {
+        plugins: [
+          ['babel-plugin-react-compiler', { runtimeModule: 'react-compiler-runtime' }]
+        ]
+      }
+    })
+  ],
   root: resolve(__dirname, 'src/mobile'),
   publicDir: resolve(__dirname, 'src/mobile/public'),
   build: {

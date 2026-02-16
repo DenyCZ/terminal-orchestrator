@@ -12,7 +12,6 @@ export function detectShells(): DetectedShell[] {
   const shells: DetectedShell[] = []
 
   if (process.platform === 'win32') {
-    // 1. CMD (always available on Windows)
     shells.push({
       id: 'cmd',
       name: 'Command Prompt',
@@ -21,7 +20,6 @@ export function detectShells(): DetectedShell[] {
       available: true
     })
 
-    // 2. Windows PowerShell
     shells.push({
       id: 'powershell',
       name: 'Windows PowerShell',
@@ -30,7 +28,6 @@ export function detectShells(): DetectedShell[] {
       available: true
     })
 
-    // 3. PowerShell 7 (Core)
     const pwshPaths = [
       'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
       'C:\\Program Files\\PowerShell\\7-preview\\pwsh.exe'
@@ -48,7 +45,6 @@ export function detectShells(): DetectedShell[] {
       }
     }
 
-    // 4. Git Bash
     const gitBashPaths = [
       'C:\\Program Files\\Git\\bin\\bash.exe',
       'C:\\Program Files (x86)\\Git\\bin\\bash.exe',
@@ -69,7 +65,6 @@ export function detectShells(): DetectedShell[] {
       }
     }
 
-    // 5. WSL - detect distributions
     try {
       // WSL outputs in UTF-16 LE on some systems, so we need to handle encoding
       const buffer = execSync('wsl --list --quiet', { 
@@ -114,7 +109,6 @@ export function detectShells(): DetectedShell[] {
       // WSL not available
     }
 
-    // 6. Cygwin
     const cygwinPaths = [
       'C:\\cygwin64\\bin\\bash.exe',
       'C:\\cygwin\\bin\\bash.exe'
@@ -133,7 +127,6 @@ export function detectShells(): DetectedShell[] {
       }
     }
 
-    // 7. MSYS2
     const msys2Path = 'C:\\msys64\\usr\\bin\\bash.exe'
     if (existsSync(msys2Path)) {
       shells.push({

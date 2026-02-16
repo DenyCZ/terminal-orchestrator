@@ -60,7 +60,8 @@ export class WebServer {
     }));
     
     // Serve index.html for all non-API routes (SPA support)
-    this.app.get('*', (_req, res, next) => {
+    // Express 5.x requires {*splat} syntax instead of * (path-to-regexp v8 breaking change)
+    this.app.get('{*splat}', (_req, res, next) => {
       // Skip API routes and health check
       if (_req.path.startsWith('/api') || _req.path === '/health') {
         return next();

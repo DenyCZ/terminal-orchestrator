@@ -1,3 +1,9 @@
+@import "tailwindcss";
+
+/* Tell Tailwind v4 where to scan for utility classes */
+@source "../**/*.{ts,tsx,js,jsx,html}";
+@source "../index.html";
+
 /* Mobile App Styles */
 
 /* Reset and Base */

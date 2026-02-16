@@ -2,16 +2,16 @@ import { ipcMain, BrowserWindow, shell } from 'electron'
 import { ConfigStore } from '../store'
 import { PtyManager } from '../pty'
 import { IPC_CHANNELS } from '@shared/ipc'
-import type { PtyConfig, TerminalDataBatch, TerminalExitEvent, OpenCodeSessionInfo, OpenCodeWatcherStatus } from '@shared/ipc'
+import type { OpenCodeSessionInfo, OpenCodeWatcherStatus } from '@shared/ipc'
 import type { Terminal, Project, ProjectGroup, WebUISettings, AppSettings, DetectedShell, ShellType } from '@shared/types'
 import type { FileEntry, ReadDirOptions } from '@shared/ipc'
 import * as git from '../git'
 import { WebUIManager } from '../web-ui-manager'
 import { detectShells } from '../shell-detector'
 import { getOpenCodeWatcher } from '../opencode'
+import { startTerminalProcess, normalizeDirectory } from '../terminal-helpers'
 import * as fs from 'fs'
 import * as path from 'path'
-import { spawn } from 'child_process'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -19,17 +19,12 @@ export function setupIpcHandlers(): void {
   const store = ConfigStore.getInstance()
   const ptyManager = PtyManager.getInstance()
 
-  // Store window reference for PTY manager
   ipcMain.on('set-main-window', (event) => {
     mainWindow = BrowserWindow.fromWebContents(event.sender) || null
     if (mainWindow) {
       ptyManager.setWindow(mainWindow)
     }
   })
-
-  // =====================
-  // Group Operations
-  // =====================
 
   ipcMain.handle(IPC_CHANNELS.GROUP_LIST, (): ProjectGroup[] => {
     return store.getGroups()
@@ -57,10 +52,6 @@ export function setupIpcHandlers(): void {
     return store.reorderGroups(groupIds)
   })
 
-  // =====================
-  // Project Operations
-  // =====================
-
   ipcMain.handle(IPC_CHANNELS.PROJECT_LIST, (): Project[] => {
     return store.getProjects()
   })
@@ -80,7 +71,6 @@ export function setupIpcHandlers(): void {
   )
 
   ipcMain.handle(IPC_CHANNELS.PROJECT_DELETE, (_, id: string): boolean => {
-    // Kill all terminals in project first
     const project = store.getProject(id)
     if (project) {
       for (const terminal of project.terminals) {
@@ -95,10 +85,6 @@ export function setupIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.PROJECT_REORDER, (_, projectIds: string[], groupId?: string): boolean => {
     return store.reorderProjects(projectIds, groupId)
   })
-
-  // =====================
-  // Terminal Operations
-  // =====================
 
   ipcMain.handle(
     IPC_CHANNELS.TERMINAL_CREATE,
@@ -135,51 +121,29 @@ export function setupIpcHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.TERMINAL_START,
     async (_, projectId: string, terminalId: string): Promise<{ pid: number } | undefined> => {
-      const terminal = store.getTerminal(projectId, terminalId)
-      if (!terminal) return undefined
-
-      // Kill existing if running
-      if (ptyManager.isRunning(terminalId)) {
-        ptyManager.kill(terminalId)
-      }
-
-      // Update status
-      store.updateTerminal(projectId, terminalId, { status: 'running' })
-
-      const config: PtyConfig = {
+      const result = await startTerminalProcess(
+        store, 
+        ptyManager, 
+        projectId, 
         terminalId,
-        shellType: terminal.shellType,
-        cwd: terminal.workingDirectory,
-        cols: 80,
-        rows: 24
-      }
-
-      const result = await ptyManager.spawn(config)
-
-      // Run startup command if provided
-      if (terminal.startupCommand) {
-        setTimeout(() => {
-          ptyManager.write(terminalId, terminal.startupCommand! + '\r')
-        }, 500)
-        
-        // If startup command contains "opencode", set the session ID
-        // This ensures only terminals explicitly running opencode show session names
-        if (terminal.startupCommand.toLowerCase().includes('opencode')) {
-          const session = openCodeWatcher.getSessionByDirectory(terminal.workingDirectory)
-          if (session) {
-            store.updateTerminal(projectId, terminalId, { openCodeSessionId: session.id })
+        (terminal) => {
+          if (terminal.startupCommand?.toLowerCase().includes('opencode')) {
+            const session = openCodeWatcher.getSessionByDirectory(terminal.workingDirectory)
+            if (session) {
+              store.updateTerminal(projectId, terminalId, { openCodeSessionId: session.id })
+            }
           }
         }
-      }
-
-      return { pid: result.pid }
+      )
+      
+      if (!result.success) return undefined
+      return { pid: result.pid! }
     }
   )
 
   ipcMain.handle(IPC_CHANNELS.TERMINAL_STOP, (_, terminalId: string): void => {
     ptyManager.kill(terminalId)
     
-    // Clear openCodeSessionId when terminal stops
     const config = store.getConfig()
     for (const project of config.projects) {
       const terminal = project.terminals.find(t => t.id === terminalId)
@@ -195,28 +159,10 @@ export function setupIpcHandlers(): void {
     async (_, projectId: string, terminalId: string): Promise<{ pid: number } | undefined> => {
       ptyManager.kill(terminalId)
       
-      const terminal = store.getTerminal(projectId, terminalId)
-      if (!terminal) return undefined
-
-      store.updateTerminal(projectId, terminalId, { status: 'running' })
-
-      const config: PtyConfig = {
-        terminalId,
-        shellType: terminal.shellType,
-        cwd: terminal.workingDirectory,
-        cols: 80,
-        rows: 24
-      }
-
-      const result = await ptyManager.spawn(config)
-
-      if (terminal.startupCommand) {
-        setTimeout(() => {
-          ptyManager.write(terminalId, terminal.startupCommand! + '\r')
-        }, 500)
-      }
-
-      return { pid: result.pid }
+      const result = await startTerminalProcess(store, ptyManager, projectId, terminalId)
+      
+      if (!result.success) return undefined
+      return { pid: result.pid! }
     }
   )
 
@@ -227,10 +173,6 @@ export function setupIpcHandlers(): void {
   ipcMain.on(IPC_CHANNELS.TERMINAL_RESIZE, (_, terminalId: string, cols: number, rows: number): void => {
     ptyManager.resize(terminalId, cols, rows)
   })
-
-  // =====================
-  // Config Operations
-  // =====================
 
   ipcMain.handle(IPC_CHANNELS.CONFIG_LOAD, () => {
     return store.getConfig()
@@ -245,19 +187,10 @@ export function setupIpcHandlers(): void {
     return store.updateSettings(settings)
   })
 
-  // =====================
-  // Terminal Events
-  // =====================
-
-  // Handle terminal exit to update status
   ipcMain.on('terminal:exit-handled', (_, terminalId: string, projectId: string, exitCode: number) => {
     const status = exitCode === 0 ? 'stopped' : 'error'
     store.updateTerminal(projectId, terminalId, { status, pid: undefined })
   })
-
-  // =====================
-  // Git Operations
-  // =====================
 
   ipcMain.handle(
     IPC_CHANNELS.GIT_WORKTREE_CREATE,
@@ -280,10 +213,6 @@ export function setupIpcHandlers(): void {
     }
   )
 
-  // =====================
-  // Shell Operations
-  // =====================
-
   ipcMain.handle(IPC_CHANNELS.SHELL_OPEN_FOLDER, (_, folderPath: string): Promise<string> => {
     return shell.openPath(folderPath)
   })
@@ -294,8 +223,6 @@ export function setupIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.SHELL_OPEN_VSCODE, async (_, filePath: string): Promise<{ success: boolean; error?: string }> => {
     try {
-      // Use vscode:// protocol directly - most reliable method on Windows
-      // VSCode registers this protocol handler on installation
       const vscodeUrl = `vscode://file/${encodeURIComponent(filePath)}`
       await shell.openExternal(vscodeUrl)
       return { success: true }
@@ -308,10 +235,6 @@ export function setupIpcHandlers(): void {
     }
   })
 
-  // =====================
-  // File System Operations
-  // =====================
-
   ipcMain.handle(IPC_CHANNELS.FS_READ_DIR, async (_, options: ReadDirOptions): Promise<FileEntry[]> => {
     const { path: dirPath } = options
     
@@ -320,7 +243,7 @@ export function setupIpcHandlers(): void {
       
       const fileEntries: FileEntry[] = await Promise.all(
         entries
-          .filter(entry => !entry.name.startsWith('.')) // Hide hidden files
+          .filter(entry => !entry.name.startsWith('.'))
           .map(async (entry): Promise<FileEntry> => {
             const fullPath = path.join(dirPath, entry.name)
             const stats = entry.isSymbolicLink() 
@@ -341,7 +264,6 @@ export function setupIpcHandlers(): void {
           })
       )
       
-      // Sort: directories first, then files alphabetically
       return fileEntries.sort((a, b) => {
         if (a.isDirectory !== b.isDirectory) {
           return a.isDirectory ? -1 : 1
@@ -353,10 +275,6 @@ export function setupIpcHandlers(): void {
       return []
     }
   })
-
-  // =====================
-  // Web UI Operations
-  // =====================
 
   const webUIManager = WebUIManager.getInstance()
 
@@ -394,31 +312,22 @@ export function setupIpcHandlers(): void {
     return { pin: newPin }
   })
 
-  // =====================
-  // OpenCode Session Operations
-  // =====================
-
   const openCodeWatcher = getOpenCodeWatcher()
 
-  // Start the watcher
   openCodeWatcher.start()
 
-  // Get all sessions
   ipcMain.handle(IPC_CHANNELS.OPENCODE_SESSIONS, (): OpenCodeSessionInfo[] => {
     return openCodeWatcher.getAllSessions()
   })
 
-  // Get session by directory
   ipcMain.handle(IPC_CHANNELS.OPENCODE_SESSION_BY_DIR, (_, directory: string): OpenCodeSessionInfo | null => {
     return openCodeWatcher.getSessionByDirectory(directory)
   })
 
-  // Get watcher status
   ipcMain.handle(IPC_CHANNELS.OPENCODE_STATUS, (): OpenCodeWatcherStatus => {
     return openCodeWatcher.getStatus()
   })
 
-  // Forward session changes to renderer
   openCodeWatcher.onSessionChange((sessions) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send(IPC_CHANNELS.OPENCODE_EVENT, {
@@ -426,17 +335,12 @@ export function setupIpcHandlers(): void {
         sessions: Array.from(sessions.values())
       })
       
-      // Also update terminals that have opencode startup command with new session IDs
       const config = store.getConfig()
       for (const project of config.projects) {
         for (const terminal of project.terminals) {
-          // Only update terminals that:
-          // 1. Have opencode in startup command
-          // 2. Are currently running
-          // 3. Don't already have a session OR session is stale
           if (terminal.startupCommand?.toLowerCase().includes('opencode') && 
               terminal.status === 'running') {
-            const session = sessions.get(terminal.workingDirectory.toLowerCase().replace(/\\/g, '/'))
+            const session = sessions.get(normalizeDirectory(terminal.workingDirectory))
             if (session && session.id !== terminal.openCodeSessionId) {
               store.updateTerminal(project.id, terminal.id, { openCodeSessionId: session.id })
             }
@@ -446,7 +350,6 @@ export function setupIpcHandlers(): void {
     }
   })
 
-  // Forward status changes to renderer
   openCodeWatcher.onStatusChange((status) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send(IPC_CHANNELS.OPENCODE_EVENT, {
