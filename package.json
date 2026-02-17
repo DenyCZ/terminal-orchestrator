@@ -12,10 +12,12 @@
     "build:mobile": "vite build --config vite.config.mobile.mts",
     "preview": "electron-vite preview",
     "start": "electron-vite preview",
-    "rebuild": "electron-rebuild -f -w node-pty",
+    "rebuild": "echo '@lydell/node-pty uses prebuilt binaries - no rebuild needed'",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@lydell/node-pty": "^1.2.0-beta.3",
+    "@xterm/addon-webgl": "^0.19.0",
     "@xterm/xterm": "^6.0.0",
     "better-sqlite3": "^12.6.2",
     "cors": "^2.8.6",
@@ -23,7 +25,6 @@
     "eventsource": "^4.1.0",
     "express": "^5.2.1",
     "ip": "^2.0.1",
-    "node-pty": "^1.1.0",
     "qrcode": "^1.5.4",
     "react": "^19.2.4",
     "react-compiler-runtime": "^1.0.0",

@@ -1,8 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
 import type { Terminal as TerminalType, Project, TerminalStatus } from '@shared/types'
+
+// Constants
+const WRITE_BATCH_INTERVAL = 16
+const RESIZE_DEBOUNCE = 150
+const SCROLLBACK_LIMIT = 10000
 
 interface TerminalViewProps {
   terminal: TerminalType
@@ -31,10 +37,31 @@ export function TerminalView({ terminal, project, ws, api, onBack }: TerminalVie
   const [currentStatus, setCurrentStatus] = useState<TerminalStatus>(terminal.status)
   const [isStarting, setIsStarting] = useState(false)
   
+  // Performance: batch writes
+  const writeBufferRef = useRef<string[]>([])
+  const flushTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  
+  // Flush writes to terminal
+  const flushWrites = () => {
+    if (writeBufferRef.current.length > 0 && terminalRef.current) {
+      const combined = writeBufferRef.current.join('')
+      writeBufferRef.current = []
+      terminalRef.current.write(combined)
+    }
+  }
+  
+  // Queue data for batched writing
+  const queueWrite = (data: string) => {
+    writeBufferRef.current.push(data)
+    if (!flushTimerRef.current) {
+      flushTimerRef.current = setInterval(flushWrites, WRITE_BATCH_INTERVAL)
+    }
+  }
+  
   useEffect(() => {
     if (!containerRef.current || terminalRef.current) return
     
-    // Create terminal
+    // Create terminal with stable options
     const term = new Terminal({
       cursorBlink: true,
       fontSize: 14,
@@ -62,31 +89,55 @@ export function TerminalView({ terminal, project, ws, api, onBack }: TerminalVie
         brightCyan: '#29b8db',
         brightWhite: '#ffffff',
       },
-      scrollback: 5000,
-      allowProposedApi: true,
+      scrollback: SCROLLBACK_LIMIT,
+      convertEol: true,
+      // FIX: Disable smooth scroll
+      smoothScrollDuration: 0,
+      scrollSensitivity: 1,
+      // FIX: Don't auto-scroll on user input
+      scrollOnUserInput: false,
     })
     
     const fitAddon = new FitAddon()
+    
+    // Load WebGL addon first for GPU acceleration (900% performance improvement)
+    // Falls back to canvas renderer automatically if WebGL is unavailable
+    try {
+      const webglAddon = new WebglAddon()
+      webglAddon.onContextLoss(() => {
+        webglAddon.dispose()
+        console.warn('WebGL context lost, falling back to canvas renderer')
+      })
+      term.loadAddon(webglAddon)
+    } catch (e) {
+      console.warn('WebGL addon failed to load, using canvas renderer:', e)
+    }
+    
     term.loadAddon(fitAddon)
     
-    term.open(containerRef.current)
-    
-    // Delay fit to allow DOM to settle
-    setTimeout(() => {
-      fitAddon.fit()
-    }, 100)
-    
+    // FIX: Store refs BEFORE opening
     terminalRef.current = term
     fitAddonRef.current = fitAddon
     
-    // Subscribe to WebSocket
-    ws.subscribe(terminal.id)
+    term.open(containerRef.current)
     
-    // Handle incoming data
+    // FIX: Delay fit to ensure DOM is ready
+    requestAnimationFrame(() => {
+      fitAddon.fit()
+      
+      // Subscribe after terminal is ready
+      ws.subscribe(terminal.id)
+      
+      // Notify initial size
+      const { cols, rows } = term
+      ws.sendResize(terminal.id, cols, rows)
+    })
+    
+    // Handle incoming data with batching
     const handleMessage = (data: any) => {
       if (data.terminalId === terminal.id) {
         if (data.type === 'output') {
-          term.write(data.data)
+          queueWrite(data.data)
         } else if (data.type === 'status' && data.status) {
           setCurrentStatus(data.status)
         }
@@ -96,26 +147,59 @@ export function TerminalView({ terminal, project, ws, api, onBack }: TerminalVie
     messageHandlerRef.current = handleMessage
     ws.onMessage(handleMessage)
     
-    // Handle input
+    // FIX: Send input immediately for responsiveness
     term.onData((data) => {
       ws.sendInput(terminal.id, data)
     })
     
-    // Handle resize
+    // FIX: Debounced resize handler
+    let resizeTimeout: ReturnType<typeof setTimeout> | null = null
+    let lastCols = 0
+    let lastRows = 0
+    
     const handleResize = () => {
-      if (fitAddonRef.current && terminalRef.current) {
-        fitAddonRef.current.fit()
-        const { cols, rows } = terminalRef.current
-        ws.sendResize(terminal.id, cols, rows)
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout)
       }
+      
+      resizeTimeout = setTimeout(() => {
+        if (!fitAddonRef.current || !terminalRef.current) return
+        
+        try {
+          fitAddonRef.current.fit()
+          
+          const { cols, rows } = terminalRef.current
+          
+          // Only send resize if size changed
+          if (cols !== lastCols || rows !== lastRows) {
+            lastCols = cols
+            lastRows = rows
+            ws.sendResize(terminal.id, cols, rows)
+          }
+        } catch (e) {
+          console.warn('Resize error:', e)
+        }
+      }, RESIZE_DEBOUNCE)
     }
     
     window.addEventListener('resize', handleResize)
     
-    // Initial resize
+    // Initial resize after delay
     setTimeout(handleResize, 200)
     
     return () => {
+      // Clear flush timer
+      if (flushTimerRef.current) {
+        clearInterval(flushTimerRef.current)
+        flushTimerRef.current = null
+      }
+      writeBufferRef.current = []
+      
+      // Clear resize timeout
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout)
+      }
+      
       window.removeEventListener('resize', handleResize)
       if (messageHandlerRef.current) {
         ws.offMessage(messageHandlerRef.current)
@@ -123,6 +207,7 @@ export function TerminalView({ terminal, project, ws, api, onBack }: TerminalVie
       ws.unsubscribe(terminal.id)
       term.dispose()
       terminalRef.current = null
+      fitAddonRef.current = null
     }
   }, [terminal.id])
   

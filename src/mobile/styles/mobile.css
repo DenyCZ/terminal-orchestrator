@@ -447,17 +447,24 @@
 
 .terminal-container {
   flex: 1;
+  min-height: 0; /* Allow flex shrink */
   padding: 8px;
-  overflow: hidden;
+  overflow: hidden; /* Container must not scroll - xterm handles it */
 }
 
 .terminal-container .xterm {
   height: 100%;
+  width: 100%;
 }
 
+/* CRITICAL: Viewport must have explicit height and overflow for scrolling */
 .terminal-container .xterm-viewport {
-  overflow-y: auto !important;
+  height: 100% !important;
+  width: 100% !important;
+  overflow-y: scroll !important;
+  overflow-x: hidden !important;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 /* Disconnected Overlay */

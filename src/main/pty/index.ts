@@ -165,7 +165,7 @@ async function createPty(
   console.log(`Creating PTY with cwd: "${validCwd}" (original: "${options.cwd}")`)
 
   try {
-    const pty = await import('node-pty')
+    const pty = await import('@lydell/node-pty')
 
     const ptyOptions: PtySpawnOptions = {
       name: 'xterm-256color',
@@ -212,7 +212,7 @@ export class PtyManager {
 
   private async checkPtyAvailability(): Promise<void> {
     try {
-      await import('node-pty')
+      await import('@lydell/node-pty')
       this.ptyAvailable = true
       console.log('node-pty is available')
     } catch (error) {

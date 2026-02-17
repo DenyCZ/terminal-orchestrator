@@ -70,38 +70,60 @@ html, body, #root {
   padding: 8px;
 }
 
-/* Fix xterm.js scrolling - viewport needs explicit overflow */
-.xterm .xterm-viewport {
-  overflow-y: auto !important;
-  /* Native-like smooth scrolling */
-  scroll-behavior: smooth;
-  -webkit-overflow-scrolling: touch;
-  /* Better scroll performance */
-  overscroll-behavior: contain;
-}
-
-/* Ensure terminal container fills available space properly */
-.xterm .xterm-screen {
-  width: 100% !important;
-}
-
-/* Terminal container must fill available height */
+/* CRITICAL: Terminal container must constrain height for scrolling to work */
 .terminal-wrapper {
   display: flex;
   flex-direction: column;
+  min-height: 0; /* Allow flex shrink */
+  overflow: hidden; /* Prevent container from expanding */
 }
 
 .terminal-container {
   height: 100%;
   width: 100%;
+  min-height: 0; /* Allow flex shrink */
+  overflow: hidden; /* Container must not scroll - xterm handles it */
 }
 
+/* xterm must fill container but not exceed it */
 .terminal-container .xterm {
   height: 100%;
+  width: 100%;
 }
 
+/* The viewport is where scrolling happens */
 .terminal-container .xterm-viewport {
   height: 100% !important;
+  width: 100% !important;
+  overflow-y: scroll !important; /* Always show scrollbar when needed */
+  overflow-x: hidden !important;
+  /* Smooth scrolling */
+  scroll-behavior: auto; /* Disable smooth for responsiveness */
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* Ensure screen doesn't overflow */
+.terminal-container .xterm-screen {
+  width: 100% !important;
+}
+
+/* Show scrollbar for webkit browsers */
+.terminal-container .xterm-viewport::-webkit-scrollbar {
+  width: 10px;
+}
+
+.terminal-container .xterm-viewport::-webkit-scrollbar-track {
+  background: #1e1e1e;
+}
+
+.terminal-container .xterm-viewport::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 5px;
+}
+
+.terminal-container .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: #777;
 }
 
 /* Drag and drop highlight */

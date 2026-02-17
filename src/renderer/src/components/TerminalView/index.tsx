@@ -10,6 +10,17 @@ import type { FileEntry } from '@shared/ipc'
 import FileTree from '../FileTree'
 import '@xterm/xterm/css/xterm.css'
 
+// Terminal instance cache to preserve history when switching terminals
+interface CachedTerminal {
+  term: Terminal
+  fitAddon: FitAddon
+  clipboardAddon: ClipboardAddon
+  imageAddon: ImageAddon
+}
+
+// Global cache shared across all TerminalView instances
+const terminalCache = new Map<string, CachedTerminal>()
+
 interface TerminalViewProps {
   terminal: TerminalType
   projectId: string
@@ -123,6 +134,50 @@ function TerminalView({
   useEffect(() => {
     if (!containerRef.current) return
 
+    // Check if we have a cached terminal for this ID
+    const cached = terminalCache.get(terminal.id)
+    
+    if (cached && cached.term) {
+      // RESTORE CACHED TERMINAL
+      terminalRef.current = cached.term
+      fitAddonRef.current = cached.fitAddon
+      clipboardAddonRef.current = cached.clipboardAddon
+      imageAddonRef.current = cached.imageAddon
+      
+      // Move the terminal element back to our container
+      const element = cached.term.element
+      if (element && element.parentElement !== containerRef.current) {
+        containerRef.current.appendChild(element)
+      }
+      
+      // Re-fit the terminal to new container size
+      requestAnimationFrame(() => {
+        cached.fitAddon.fit()
+        const { cols, rows } = cached.term
+        window.electronAPI?.terminal.resize(terminal.id, cols, rows)
+        
+        // Focus the terminal
+        cached.term.focus()
+      })
+      
+      // Check if terminal needs to be started
+      if (terminal.status === 'idle' && !hasStartedRef.current) {
+        hasStartedRef.current = true
+        startTerminal(projectId, terminal.id)
+      }
+      
+      // Return early - no cleanup needed for cached terminals
+      // (we keep them in the cache for reuse)
+      return () => {
+        // Just remove the element from DOM, but don't dispose
+        const cachedTerm = terminalCache.get(terminal.id)
+        if (cachedTerm?.term.element?.parentElement) {
+          cachedTerm.term.element.parentElement.removeChild(cachedTerm.term.element)
+        }
+      }
+    }
+
+    // CREATE NEW TERMINAL
     hasStartedRef.current = false
 
     const term = new Terminal({
@@ -182,6 +237,14 @@ function TerminalView({
       fitAddonRef.current = fitAddon
       clipboardAddonRef.current = clipboardAddon
       imageAddonRef.current = imageAddon
+
+      // CACHE THE TERMINAL for reuse when switching
+      terminalCache.set(terminal.id, {
+        term,
+        fitAddon,
+        clipboardAddon,
+        imageAddon
+      })
 
       if (terminal.status === 'idle' && !hasStartedRef.current) {
         hasStartedRef.current = true
@@ -268,13 +331,6 @@ function TerminalView({
       return true
     })
 
-    // Handle output with buffered writes for performance
-    const removeDataListener = window.electronAPI?.terminal.onData((data) => {
-      if (data.terminalId === terminal.id) {
-        queueWrite(data.data)
-      }
-    })
-
     return () => {
       // Clear scroll debounce timer
       if (scrollDebounceTimerRef.current) {
@@ -288,14 +344,34 @@ function TerminalView({
       
       clearTimeout(resizeTimeout)
       resizeObserver.disconnect()
-      removeDataListener?.()
       clipboardAddonRef.current = null
       imageAddonRef.current = null
-      term.dispose()
+      
+      // DO NOT dispose - keep terminal cached for reuse!
+      // Just detach from DOM by removing element
+      if (term.element?.parentElement) {
+        term.element.parentElement.removeChild(term.element)
+      }
+      
+      // Clear local refs only
       terminalRef.current = null
       fitAddonRef.current = null
     }
   }, [terminal.id, terminal.status, startTerminal, onOpenCommandPalette, onNextTerminal, onPrevTerminal, onNewTerminal])
+
+  // Separate useEffect for data listener - runs for BOTH cached and new terminals
+  useEffect(() => {
+    // Handle output with buffered writes for performance
+    const removeDataListener = window.electronAPI?.terminal.onData((data) => {
+      if (data.terminalId === terminal.id) {
+        queueWrite(data.data)
+      }
+    })
+
+    return () => {
+      removeDataListener?.()
+    }
+  }, [terminal.id, queueWrite])
 
   // Handle resize when file explorer visibility/width changes
   useEffect(() => {
