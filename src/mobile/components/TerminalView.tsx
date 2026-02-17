@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
@@ -6,7 +6,6 @@ import '@xterm/xterm/css/xterm.css'
 import type { Terminal as TerminalType, Project, TerminalStatus } from '@shared/types'
 
 // Constants
-const WRITE_BATCH_INTERVAL = 16
 const RESIZE_DEBOUNCE = 150
 const SCROLLBACK_LIMIT = 10000
 
@@ -37,26 +36,15 @@ export function TerminalView({ terminal, project, ws, api, onBack }: TerminalVie
   const [currentStatus, setCurrentStatus] = useState<TerminalStatus>(terminal.status)
   const [isStarting, setIsStarting] = useState(false)
   
-  // Performance: batch writes
-  const writeBufferRef = useRef<string[]>([])
-  const flushTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  
-  // Flush writes to terminal
-  const flushWrites = () => {
-    if (writeBufferRef.current.length > 0 && terminalRef.current) {
-      const combined = writeBufferRef.current.join('')
-      writeBufferRef.current = []
-      terminalRef.current.write(combined)
+  // Write directly to terminal - xterm.js handles buffering internally
+  // IMPORTANT: We must write data atomically to avoid splitting escape sequences
+  // Buffering with setInterval can split multi-byte ANSI escape sequences
+  // causing characters to appear stuck on the left side of the terminal
+  const writeToTerminal = useCallback((data: string) => {
+    if (terminalRef.current) {
+      terminalRef.current.write(data)
     }
-  }
-  
-  // Queue data for batched writing
-  const queueWrite = (data: string) => {
-    writeBufferRef.current.push(data)
-    if (!flushTimerRef.current) {
-      flushTimerRef.current = setInterval(flushWrites, WRITE_BATCH_INTERVAL)
-    }
-  }
+  }, [])
   
   useEffect(() => {
     if (!containerRef.current || terminalRef.current) return
@@ -133,11 +121,11 @@ export function TerminalView({ terminal, project, ws, api, onBack }: TerminalVie
       ws.sendResize(terminal.id, cols, rows)
     })
     
-    // Handle incoming data with batching
+    // Handle incoming data - write directly to terminal
     const handleMessage = (data: any) => {
       if (data.terminalId === terminal.id) {
         if (data.type === 'output') {
-          queueWrite(data.data)
+          writeToTerminal(data.data)
         } else if (data.type === 'status' && data.status) {
           setCurrentStatus(data.status)
         }
@@ -188,13 +176,6 @@ export function TerminalView({ terminal, project, ws, api, onBack }: TerminalVie
     setTimeout(handleResize, 200)
     
     return () => {
-      // Clear flush timer
-      if (flushTimerRef.current) {
-        clearInterval(flushTimerRef.current)
-        flushTimerRef.current = null
-      }
-      writeBufferRef.current = []
-      
       // Clear resize timeout
       if (resizeTimeout) {
         clearTimeout(resizeTimeout)
@@ -209,7 +190,7 @@ export function TerminalView({ terminal, project, ws, api, onBack }: TerminalVie
       terminalRef.current = null
       fitAddonRef.current = null
     }
-  }, [terminal.id])
+  }, [terminal.id, writeToTerminal, ws])
   
   const handleStart = async () => {
     setIsStarting(true)

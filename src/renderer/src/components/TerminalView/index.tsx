@@ -101,35 +101,16 @@ function TerminalView({
     }, 50)
   }, [])
 
-  // Write buffer functions for performance - uses requestAnimationFrame for visual smoothness
-  const pendingWritesRef = useRef<string[]>([])
-  const rafPendingRef = useRef<boolean>(false)
-  
-  const flushWriteBuffer = useCallback(() => {
-    if (pendingWritesRef.current.length > 0 && terminalRef.current) {
-      // Combine all pending writes
-      const data = pendingWritesRef.current.join('')
-      pendingWritesRef.current = []
-      
-      // Write to terminal
+  // Write directly to terminal - xterm.js handles buffering internally
+  // IMPORTANT: We must write data atomically to avoid splitting escape sequences
+  // Buffering with requestAnimationFrame can split multi-byte ANSI escape sequences
+  // causing characters to appear stuck on the left side of the terminal
+  const writeToTerminal = useCallback((data: string) => {
+    if (terminalRef.current) {
       terminalRef.current.write(data)
-      
-      // Trigger scroll
       scrollToBottomDebounced()
     }
-    rafPendingRef.current = false
   }, [scrollToBottomDebounced])
-
-  const queueWrite = useCallback((data: string) => {
-    pendingWritesRef.current.push(data)
-    
-    if (!rafPendingRef.current) {
-      rafPendingRef.current = true
-      requestAnimationFrame(() => {
-        flushWriteBuffer()
-      })
-    }
-  }, [flushWriteBuffer])
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -210,11 +191,10 @@ function TerminalView({
         brightWhite: '#e5e5e5'
       },
       scrollback: 5000,
-      convertEol: true,
+      convertEol: false, // Disable - causes issues with escape sequences
       // Native-like scrolling configuration
-      smoothScrollDuration: 0,
-      scrollSensitivity: 1.5,
-      fastScrollSensitivity: 7,
+      scrollSensitivity: 1,
+      fastScrollSensitivity: 5,
       scrollOnUserInput: true
     })
 
@@ -338,10 +318,6 @@ function TerminalView({
         scrollDebounceTimerRef.current = null
       }
       
-      // Clear pending writes
-      pendingWritesRef.current = []
-      rafPendingRef.current = false
-      
       clearTimeout(resizeTimeout)
       resizeObserver.disconnect()
       clipboardAddonRef.current = null
@@ -361,17 +337,17 @@ function TerminalView({
 
   // Separate useEffect for data listener - runs for BOTH cached and new terminals
   useEffect(() => {
-    // Handle output with buffered writes for performance
+    // Write directly to terminal - xterm.js handles buffering internally
     const removeDataListener = window.electronAPI?.terminal.onData((data) => {
       if (data.terminalId === terminal.id) {
-        queueWrite(data.data)
+        writeToTerminal(data.data)
       }
     })
 
     return () => {
       removeDataListener?.()
     }
-  }, [terminal.id, queueWrite])
+  }, [terminal.id, writeToTerminal])
 
   // Handle resize when file explorer visibility/width changes
   useEffect(() => {

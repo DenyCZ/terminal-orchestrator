@@ -30,42 +30,30 @@ interface PtySession {
   pid: number
 }
 
-// Functional data batcher for performance optimization
-const createDataBatcher = (batchInterval = 16) => {
-  const buffers = new Map<string, string[]>()
-  const timers = new Map<string, NodeJS.Timeout>()
+// Data sender - sends terminal data immediately to avoid splitting escape sequences
+// IMPORTANT: We must send data atomically to avoid splitting multi-byte ANSI escape sequences
+// Buffering with setTimeout can split multi-byte ANSI escape sequences
+// causing characters to appear stuck on the left side of the terminal
+const createDataSender = () => {
   let window: BrowserWindow | null = null
 
-  const flush = (terminalId: string) => {
-    const buffer = buffers.get(terminalId)
-    if (buffer && buffer.length > 0 && window && !window.isDestroyed()) {
+  const sendData = (terminalId: string, data: string) => {
+    if (window && !window.isDestroyed()) {
       window.webContents.send('terminal:data', {
         terminalId,
-        data: buffer.join('')
+        data
       })
     }
-    buffers.delete(terminalId)
-    timers.delete(terminalId)
   }
 
   return {
     setWindow: (w: BrowserWindow) => { window = w },
-    queueData: (terminalId: string, data: string) => {
-      buffers.set(terminalId, [...(buffers.get(terminalId) || []), data])
-      if (!timers.has(terminalId)) {
-        timers.set(terminalId, setTimeout(() => flush(terminalId), batchInterval))
-      }
-    },
-    clear: (terminalId: string) => {
-      const timer = timers.get(terminalId)
-      if (timer) clearTimeout(timer)
-      buffers.delete(terminalId)
-      timers.delete(terminalId)
+    sendData,
+    clear: () => {
+      // No-op - no buffering
     },
     clearAll: () => {
-      timers.forEach(t => clearTimeout(t))
-      timers.clear()
-      buffers.clear()
+      // No-op - no buffering
     }
   }
 }
@@ -196,13 +184,13 @@ async function createPty(
 export class PtyManager {
   private static instance: PtyManager
   private sessions: Map<string, PtySession> = new Map()
-  private batcher: ReturnType<typeof createDataBatcher>
+  private dataSender: ReturnType<typeof createDataSender>
   private window: BrowserWindow | null = null
   private ptyAvailable: boolean | null = null
   private wsServer: ITerminalDataBroadcaster | null = null
 
   private constructor() {
-    this.batcher = createDataBatcher()
+    this.dataSender = createDataSender()
     this.checkPtyAvailability()
   }
   
@@ -230,7 +218,7 @@ export class PtyManager {
 
   setWindow(window: BrowserWindow): void {
     this.window = window
-    this.batcher.setWindow(window)
+    this.dataSender.setWindow(window)
   }
 
   private getShell(shellType: ShellType): { shell: string; args: string[] } {
@@ -317,16 +305,16 @@ export class PtyManager {
       pid: ptyProcess.pid
     }
 
-    // Setup data handling with batching
+    // Setup data handling - send immediately to avoid splitting escape sequences
     ptyProcess.onData((data) => {
-      this.batcher.queueData(config.terminalId, data)
+      this.dataSender.sendData(config.terminalId, data)
       // Also broadcast to WebSocket clients
       this.wsServer?.broadcastToTerminal(config.terminalId, data)
     })
 
     // Handle exit
     ptyProcess.onExit(({ exitCode }) => {
-      this.batcher.clear(config.terminalId)
+      this.dataSender.clear(config.terminalId)
       this.sessions.delete(config.terminalId)
       
       // Broadcast status to WebSocket clients
@@ -375,7 +363,7 @@ export class PtyManager {
       } catch (error) {
         console.warn(`Kill failed for terminal ${terminalId}:`, error)
       }
-      this.batcher.clear(terminalId)
+      this.dataSender.clear(terminalId)
       this.sessions.delete(terminalId)
     }
   }
@@ -384,7 +372,7 @@ export class PtyManager {
     for (const terminalId of this.sessions.keys()) {
       this.kill(terminalId)
     }
-    this.batcher.clearAll()
+    this.dataSender.clearAll()
   }
 
   getPid(terminalId: string): number | undefined {
