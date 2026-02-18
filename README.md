@@ -27,35 +27,9 @@ A cross-platform desktop application for managing multiple terminal sessions gro
 
 ## Prerequisites
 
-### Windows
+- **Node.js 18+**
 
-node-pty requires native compilation. You need:
-
-1. **Visual Studio Build Tools 2022** with:
-   - MSVC v143 - VS 2022 C++ x64/x86 build tools
-   - Windows 10/11 SDK
-   - **Spectre-mitigated libraries** (required for node-pty)
-
-   To install Spectre libraries:
-   - Open Visual Studio Installer
-   - Click "Modify" on Build Tools 2022
-   - Go to "Individual Components"
-   - Search for "Spectre"
-   - Check "MSVC v143 - VS 2022 C++ x64/x86 Spectre-mitigated libs (Latest)"
-   - Click "Modify" to install
-
-2. **Node.js 18+**
-
-### macOS
-
-1. **Xcode Command Line Tools**
-   ```bash
-   xcode-select --install
-   ```
-
-2. **Node.js 18+**
-
-   Install via Homebrew or from [nodejs.org](https://nodejs.org/)
+That's it! `npm install` will automatically download prebuilt binaries for native modules. You only need additional build tools if you encounter compilation errors (see Known Issues).
 
 ## Installation
 
@@ -129,26 +103,16 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed technical documentation.
 - **Windows** - Full support with CMD and PowerShell
 - **macOS** - Full support with Terminal (bash/zsh)
 
-## Known Issues
+## Troubleshooting
 
-### Windows: node-pty Build Failures
+### Windows: Build errors during `npm install`
 
-If you see errors about "Spectre-mitigated libraries":
-```
-error MSB8040: Pro tento projekt se požadují knihovny s omezením hrozby Spectre
-```
+If you encounter errors about missing build tools or "Spectre-mitigated libraries", install **Visual Studio Build Tools 2022** with:
+- MSVC v143 - VS 2022 C++ x64/x86 build tools
+- Windows 10/11 SDK
+- **Spectre-mitigated libraries**
 
-This means you need to install Spectre libraries in Visual Studio Build Tools. See Prerequisites above.
-
-### Alternative: Using Prebuilt Binaries (Windows)
-
-If you can't install Spectre libraries, you can try using prebuilt binaries:
-
-```bash
-# Try using prebuilt binaries
-npm install --ignore-scripts
-npx @electron/rebuild -v -w node-pty
-```
+To install Spectre libraries: Visual Studio Installer → Modify Build Tools 2022 → Individual Components → Search "Spectre" → Check "MSVC v143 - VS 2022 C++ x64/x86 Spectre-mitigated libs (Latest)" → Modify
 
 ## License
 
