@@ -139,17 +139,39 @@ export function detectShells(): DetectedShell[] {
       })
     }
   } else {
-    // Non-Windows: Just use the default shell
+    // Non-Windows: Detect available shells (macOS, Linux)
+    const commonShells = [
+      { name: 'bash', paths: ['/bin/bash', '/usr/bin/bash', '/usr/local/bin/bash'] },
+      { name: 'zsh', paths: ['/bin/zsh', '/usr/bin/zsh', '/usr/local/bin/zsh'] },
+      { name: 'fish', paths: ['/usr/bin/fish', '/usr/local/bin/fish', '/opt/homebrew/bin/fish'] },
+    ]
+
+    for (const shell of commonShells) {
+      // Find the first existing path for this shell
+      const existingPath = shell.paths.find(p => existsSync(p))
+      if (existingPath && !shells.find(s => s.id === shell.name)) {
+        shells.push({
+          id: shell.name,
+          name: shell.name.charAt(0).toUpperCase() + shell.name.slice(1),
+          type: shell.name as 'bash' | 'zsh' | 'fish',
+          path: existingPath,
+          available: true
+        })
+      }
+    }
+
+    // Also add the user's default shell if not already added
     const defaultShell = process.env.SHELL || '/bin/bash'
     const shellName = path.basename(defaultShell)
-    
-    shells.push({
-      id: shellName,
-      name: shellName.charAt(0).toUpperCase() + shellName.slice(1),
-      type: 'bash',
-      path: defaultShell,
-      available: true
-    })
+    if (!shells.find(s => s.id === shellName)) {
+      shells.push({
+        id: shellName,
+        name: shellName.charAt(0).toUpperCase() + shellName.slice(1),
+        type: shellName as 'bash' | 'zsh' | 'fish' | 'custom',
+        path: defaultShell,
+        available: true
+      })
+    }
   }
 
   return shells
@@ -197,12 +219,18 @@ export function mapIdToShellType(id: string): ShellType {
     case 'cygwin':
     case 'msys2':
       return 'git-bash' as ShellType
+    case 'bash':
+      return 'bash'
+    case 'zsh':
+      return 'zsh'
+    case 'fish':
+      return 'fish'
     default:
       if (id.startsWith('wsl-')) {
         return 'wsl' as ShellType
       }
-      // For custom/unknown shells, default to powershell
-      return 'powershell'
+      // For custom/unknown shells, use custom type
+      return 'custom'
   }
 }
 

@@ -1,5 +1,5 @@
 // Shell types - extended to support multiple shell environments
-export type ShellType = 'cmd' | 'powershell' | 'pwsh' | 'git-bash' | 'wsl' | 'cygwin' | 'msys2' | 'custom';
+export type ShellType = 'cmd' | 'powershell' | 'pwsh' | 'git-bash' | 'wsl' | 'cygwin' | 'msys2' | 'bash' | 'zsh' | 'fish' | 'custom';
 
 // Shell category for internal use
 export type ShellCategory = 'cmd' | 'powershell' | 'pwsh' | 'bash' | 'wsl';

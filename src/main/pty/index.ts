@@ -6,6 +6,7 @@ import path from 'path'
 import os from 'os'
 import type { ShellType, TerminalStatus } from '@shared/types'
 import type { PtyConfig } from '@shared/ipc'
+import { detectShells } from '../shell-detector'
 
 // Interface for WebSocket broadcaster (to avoid circular dependency)
 export interface ITerminalDataBroadcaster {
@@ -223,6 +224,26 @@ export class PtyManager {
 
   private getShell(shellType: ShellType): { shell: string; args: string[] } {
     if (process.platform !== 'win32') {
+      // On Linux/macOS, use detected shells
+      const shells = detectShells()
+      
+      // Try to find a shell matching the requested type
+      const matchingShell = shells.find(s => s.id === shellType || s.type === shellType)
+      if (matchingShell) {
+        return { shell: matchingShell.path, args: matchingShell.args || [] }
+      }
+      
+      // Fallback to bash, zsh, fish, or first available
+      const bashShell = shells.find(s => s.id === 'bash')
+      if (bashShell) return { shell: bashShell.path, args: bashShell.args || [] }
+      
+      const zshShell = shells.find(s => s.id === 'zsh')
+      if (zshShell) return { shell: zshShell.path, args: zshShell.args || [] }
+      
+      const fishShell = shells.find(s => s.id === 'fish')
+      if (fishShell) return { shell: fishShell.path, args: fishShell.args || [] }
+      
+      // Last resort: use $SHELL or /bin/bash
       return { shell: process.env.SHELL || '/bin/bash', args: [] }
     }
 

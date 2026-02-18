@@ -9,6 +9,7 @@ import { v4 as uuid } from 'uuid'
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
+import { detectShells } from '../shell-detector'
 
 const STORE_KEY = 'terminal-orchestrator-config'
 
@@ -258,7 +259,25 @@ export const deleteTerminal = (projectId: string, terminalId: string): boolean =
 }
 
 // Settings
-export const getSettings = () => getConfig().settings
+export const getSettings = () => {
+  const settings = getConfig().settings
+  
+  // Normalize defaultShell for non-Windows platforms
+  if (process.platform !== 'win32' && settings.defaultShell === 'powershell') {
+    // On Linux/macOS, use bash as default instead of powershell
+    const shells = detectShells()
+    const bashShell = shells.find(s => s.id === 'bash')
+    if (bashShell) {
+      return { ...settings, defaultShell: 'bash' as ShellType }
+    }
+    // If bash not available, use the first available shell
+    if (shells.length > 0) {
+      return { ...settings, defaultShell: shells[0].id as ShellType }
+    }
+  }
+  
+  return settings
+}
 
 export const updateSettings = (settings: Partial<AppConfig['settings']>): AppConfig['settings'] => {
   const config = getConfig()
