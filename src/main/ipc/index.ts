@@ -236,6 +236,23 @@ export function setupIpcHandlers(): void {
     }
   })
 
+  ipcMain.handle(IPC_CHANNELS.SHELL_OPEN_ZED, async (_, filePath: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      // Zed URL scheme: zed://file/path/to/file
+      // On Windows, convert backslashes to forward slashes
+      const normalizedPath = filePath.replace(/\\/g, '/')
+      const zedUrl = `zed://file${normalizedPath}`
+      await shell.openExternal(zedUrl)
+      return { success: true }
+    } catch (error) {
+      console.error('Failed to open Zed:', error)
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Failed to open Zed' 
+      }
+    }
+  })
+
   ipcMain.handle(IPC_CHANNELS.FS_READ_DIR, async (_, options: ReadDirOptions): Promise<FileEntry[]> => {
     const { path: dirPath } = options
     

@@ -57,6 +57,7 @@ export interface ElectronAPI {
     openFolder: (folderPath: string) => Promise<string>
     listAvailable: () => Promise<DetectedShell[]>
     openInVSCode: (filePath: string) => Promise<{ success: boolean; error?: string }>
+    openInZed: (filePath: string) => Promise<{ success: boolean; error?: string }>
   }
 
   fs: {

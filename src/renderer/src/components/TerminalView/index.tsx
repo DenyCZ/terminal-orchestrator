@@ -587,6 +587,13 @@ function TerminalView({
           >
             Open in VSCode
           </button>
+          <button
+            onClick={() => window.electronAPI?.shell.openInZed(selectedFile.path)}
+            className="text-[#f5a623] hover:text-[#f5a623]/80 hover:underline transition-colors ml-3"
+            title="Open in Zed"
+          >
+            Open in Zed
+          </button>
         </div>
       )}
     </div>

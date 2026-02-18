@@ -49,6 +49,7 @@ export const IPC_CHANNELS = {
   SHELL_OPEN_FOLDER: 'shell:open-folder',
   SHELL_LIST: 'shell:list',
   SHELL_OPEN_VSCODE: 'shell:open-vscode',
+  SHELL_OPEN_ZED: 'shell:open-zed',
 
   // File system operations
   FS_READ_DIR: 'fs:read-dir',

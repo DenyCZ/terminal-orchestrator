@@ -118,7 +118,9 @@ const electronAPI = {
     listAvailable: (): Promise<DetectedShell[]> =>
       ipcRenderer.invoke(IPC_CHANNELS.SHELL_LIST),
     openInVSCode: (filePath: string): Promise<{ success: boolean; error?: string }> =>
-      ipcRenderer.invoke(IPC_CHANNELS.SHELL_OPEN_VSCODE, filePath)
+      ipcRenderer.invoke(IPC_CHANNELS.SHELL_OPEN_VSCODE, filePath),
+    openInZed: (filePath: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SHELL_OPEN_ZED, filePath)
   },
 
   // File system operations
