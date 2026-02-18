@@ -1,13 +1,13 @@
 # Terminal Orchestrator
 
-A Windows desktop application for managing multiple terminal sessions grouped into projects.
+A cross-platform desktop application for managing multiple terminal sessions grouped into projects.
 
 ![Terminal Orchestrator](docs/screenshot.png)
 
 ## Features
 
 - **Project-based organization**: Group terminals by project
-- **Multiple shell support**: CMD and PowerShell
+- **Multiple shell support**: CMD, PowerShell, bash, zsh (platform-dependent)
 - **Real PTY terminals**: Full interactive terminal support with xterm.js
 - **Drag & drop**: Drop folders to create projects
 - **Orchestration controls**: Start/stop all terminals at once
@@ -27,7 +27,7 @@ A Windows desktop application for managing multiple terminal sessions grouped in
 
 ## Prerequisites
 
-### Windows Build Tools (Required for node-pty)
+### Windows
 
 node-pty requires native compilation. You need:
 
@@ -45,6 +45,17 @@ node-pty requires native compilation. You need:
    - Click "Modify" to install
 
 2. **Node.js 18+**
+
+### macOS
+
+1. **Xcode Command Line Tools**
+   ```bash
+   xcode-select --install
+   ```
+
+2. **Node.js 18+**
+
+   Install via Homebrew or from [nodejs.org](https://nodejs.org/)
 
 ## Installation
 
@@ -113,9 +124,14 @@ terminal-orchestrator/
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed technical documentation.
 
+## Platform Support
+
+- **Windows** - Full support with CMD and PowerShell
+- **macOS** - Full support with Terminal (bash/zsh)
+
 ## Known Issues
 
-### node-pty Build Failures
+### Windows: node-pty Build Failures
 
 If you see errors about "Spectre-mitigated libraries":
 ```
@@ -124,7 +140,7 @@ error MSB8040: Pro tento projekt se požadují knihovny s omezením hrozby Spect
 
 This means you need to install Spectre libraries in Visual Studio Build Tools. See Prerequisites above.
 
-### Alternative: Using Prebuilt Binaries
+### Alternative: Using Prebuilt Binaries (Windows)
 
 If you can't install Spectre libraries, you can try using prebuilt binaries:
 
