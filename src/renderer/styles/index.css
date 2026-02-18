@@ -1351,3 +1351,109 @@ html, body, #root {
 .space-x-2 > :not([hidden]) ~ :not([hidden]) { margin-left: 0.5rem; }
 .space-x-3 > :not([hidden]) ~ :not([hidden]) { margin-left: 0.75rem; }
 .space-x-4 > :not([hidden]) ~ :not([hidden]) { margin-left: 1rem; }
+
+/* ========================================
+   CONTEXT PANEL (Right Sidebar)
+   ======================================== */
+
+.context-panel {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  background: #252526;
+  border-left: 1px solid #3c3c3c;
+  height: 100%;
+  overflow: hidden;
+}
+
+.context-panel-resize-handle {
+  width: 4px;
+  background: #3c3c3c;
+  cursor: col-resize;
+  flex-shrink: 0;
+  transition: background-color 0.15s;
+}
+
+.context-panel-resize-handle:hover,
+.context-panel-resize-handle.active {
+  background: #4ec9b0;
+}
+
+.context-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #1e1e1e;
+  border-bottom: 1px solid #3c3c3c;
+  min-height: 40px;
+}
+
+.context-panel-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #d4d4d4;
+}
+
+.context-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.context-panel-btn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: #9d9d9d;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.15s;
+}
+
+.context-panel-btn:hover {
+  background: #3c3c3c;
+  color: #d4d4d4;
+}
+
+.context-panel-content {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.context-panel-textarea {
+  flex: 1;
+  width: 100%;
+  padding: 12px;
+  background: #1e1e1e;
+  border: none;
+  color: #d4d4d4;
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  resize: none;
+  outline: none;
+}
+
+.context-panel-textarea::placeholder {
+  color: #6b6b6b;
+}
+
+.context-panel-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  padding: 6px 12px;
+  background: #1e1e1e;
+  border-top: 1px solid #3c3c3c;
+  font-size: 11px;
+  color: #6b6b6b;
+}

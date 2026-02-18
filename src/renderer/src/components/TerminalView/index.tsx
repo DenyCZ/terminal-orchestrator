@@ -8,6 +8,7 @@ import { useAppStore } from '../../store'
 import type { Terminal as TerminalType } from '@shared/types'
 import type { FileEntry } from '@shared/ipc'
 import FileTree from '../FileTree'
+import ContextPanel from '../ContextPanel'
 import '@xterm/xterm/css/xterm.css'
 
 // Terminal instance cache to preserve history when switching terminals
@@ -73,6 +74,10 @@ function TerminalView({
   const [explorerWidth, setExplorerWidth] = useState(250)
   const [isResizing, setIsResizing] = useState(false)
   const [selectedFile, setSelectedFile] = useState<FileEntry | null>(null)
+
+  // Context panel state
+  const [showContextPanel, setShowContextPanel] = useState(false)
+  const [contextPanelWidth, setContextPanelWidth] = useState(300)
 
   // Helper to check if user is at bottom of terminal
   const isAtBottom = useCallback(() => {
@@ -147,9 +152,26 @@ function TerminalView({
         startTerminal(projectId, terminal.id)
       }
       
-      // Return early - no cleanup needed for cached terminals
-      // (we keep them in the cache for reuse)
+      // Set up ResizeObserver for cached terminal (was disconnected when unmounted)
+      let resizeTimeout: ReturnType<typeof setTimeout>
+      const handleResize = () => {
+        clearTimeout(resizeTimeout)
+        resizeTimeout = setTimeout(() => {
+          const cachedTerm = terminalCache.get(terminal.id)
+          if (cachedTerm) {
+            cachedTerm.fitAddon.fit()
+            const { cols, rows } = cachedTerm.term
+            window.electronAPI?.terminal.resize(terminal.id, cols, rows)
+          }
+        }, 100)
+      }
+      
+      const resizeObserver = new ResizeObserver(handleResize)
+      resizeObserver.observe(containerRef.current!)
+      
       return () => {
+        clearTimeout(resizeTimeout)
+        resizeObserver.disconnect()
         // Just remove the element from DOM, but don't dispose
         const cachedTerm = terminalCache.get(terminal.id)
         if (cachedTerm?.term.element?.parentElement) {
@@ -291,8 +313,13 @@ function TerminalView({
       isUserAtBottomRef.current = isAtBottom()
     })
 
-    // Custom wheel handler for Ctrl+wheel zoom
+    // Custom wheel handler for:
+    // 1. Ctrl+wheel zoom
+    // 2. Scroll in alternate buffer (TUI apps like OpenCode, vim, etc.)
+    // When a TUI app enables mouse mode, scroll events are normally sent to the app.
+    // We intercept them and handle scrolling ourselves when in alternate buffer mode.
     term.attachCustomWheelEventHandler((event) => {
+      // Ctrl+wheel: zoom
       if (event.ctrlKey) {
         const delta = event.deltaY > 0 ? -1 : 1
         const currentSize = term.options.fontSize || 14
@@ -308,7 +335,22 @@ function TerminalView({
         })
         return false
       }
-      return true
+
+      // In alternate buffer mode, handle scrolling ourselves instead of sending to app
+      // This allows scrolling in TUI apps like OpenCode, vim, etc.
+      const buffer = term.buffer.active
+      if (buffer.type === 'alternate') {
+        const scrollAmount = event.deltaY > 0 ? 3 : -3
+        const currentY = buffer.viewportY
+        const newY = Math.max(0, Math.min(buffer.length - term.rows, currentY + scrollAmount))
+
+        if (newY !== currentY) {
+          term.scrollLines(newY - currentY)
+        }
+        return false // Don't send to PTY
+      }
+
+      return true // Let xterm.js handle normally (normal buffer)
     })
 
     return () => {
@@ -362,7 +404,7 @@ function TerminalView({
         window.electronAPI?.terminal.resize(terminal.id, cols, rows)
       })
     }
-  }, [terminal.id, showFileExplorer, explorerWidth])
+  }, [terminal.id, showFileExplorer, explorerWidth, showContextPanel, contextPanelWidth])
   
   // Handle resize drag
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -438,6 +480,19 @@ function TerminalView({
             📂
           </button>
           
+          {/* Context Panel toggle button */}
+          <button
+            onClick={() => setShowContextPanel(!showContextPanel)}
+            className={`px-2 py-1 text-sm rounded transition-colors ${
+              showContextPanel 
+                ? 'bg-[#4ec9b0] text-[#1e1e1e]' 
+                : 'bg-gray-600 hover:bg-gray-500'
+            }`}
+            title={showContextPanel ? 'Hide Context Panel' : 'Show Context Panel'}
+          >
+            📝
+          </button>
+          
           <button
             onClick={() => window.electronAPI?.shell.openFolder(terminal.workingDirectory)}
             className="px-2 py-1 text-sm bg-gray-600 hover:bg-gray-500 rounded transition-colors"
@@ -503,6 +558,15 @@ function TerminalView({
             className="terminal-container"
           />
         </div>
+        
+        {/* Context Panel (right sidebar) */}
+        <ContextPanel
+          terminalId={terminal.id}
+          isOpen={showContextPanel}
+          width={contextPanelWidth}
+          onWidthChange={setContextPanelWidth}
+          onClose={() => setShowContextPanel(false)}
+        />
       </div>
       
       {/* Selected file info (optional footer) */}
