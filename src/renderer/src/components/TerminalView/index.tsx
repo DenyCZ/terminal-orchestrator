@@ -62,7 +62,7 @@ function TerminalView({
   const clipboardAddonRef = useRef<ClipboardAddon | null>(null)
   const imageAddonRef = useRef<ImageAddon | null>(null)
   const hasStartedRef = useRef(false)
-  const { startTerminal, stopTerminal, restartTerminal, projects } = useAppStore()
+  const { startTerminal, stopTerminal, restartTerminal, projects, settings } = useAppStore()
   const project = projects.find(p => p.id === projectId)
   
   // Performance optimization refs
@@ -221,7 +221,10 @@ function TerminalView({
     })
 
     const fitAddon = new FitAddon()
-    const clipboardAddon = new ClipboardAddon()
+    const clipboardAddon = new ClipboardAddon({
+      pasteMultilineAsSingleLine: settings.clipboard?.pasteMultilineAsSingleLine,
+      multilineJoinChar: settings.clipboard?.multilineJoinChar
+    })
     const imageAddon = new ImageAddon()
     
     term.loadAddon(fitAddon)

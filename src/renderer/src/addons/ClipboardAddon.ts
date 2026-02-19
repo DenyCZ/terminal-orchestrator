@@ -7,6 +7,10 @@ export interface ClipboardAddonOptions {
   pasteOnRightClick?: boolean
   /** Enable Ctrl+Shift+V paste (default: true) */
   ctrlShiftVPaste?: boolean
+  /** Convert multiline clipboard to single line when pasting (default: false) */
+  pasteMultilineAsSingleLine?: boolean
+  /** Character to join lines with when pasting multiline (default: space) */
+  multilineJoinChar?: string
 }
 
 /**
@@ -23,6 +27,8 @@ export class ClipboardAddon implements ITerminalAddon {
       copyOnSelect: true,
       pasteOnRightClick: true,
       ctrlShiftVPaste: true,
+      pasteMultilineAsSingleLine: false,
+      multilineJoinChar: ' ',
       ...options
     }
   }
@@ -71,8 +77,13 @@ export class ClipboardAddon implements ITerminalAddon {
     if (!this._terminal) return
 
     try {
-      const text = await navigator.clipboard.readText()
+      let text = await navigator.clipboard.readText()
       if (text) {
+        // Transform multiline to single line if enabled
+        if (this._options.pasteMultilineAsSingleLine) {
+          const joinChar = this._options.multilineJoinChar || ' '
+          text = text.replace(/[\r\n]+/g, joinChar)
+        }
         this._terminal.paste(text)
       }
     } catch (err) {

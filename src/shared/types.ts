@@ -112,12 +112,21 @@ export interface Project {
   updatedAt: number;
 }
 
+// Clipboard settings for paste behavior
+export interface ClipboardSettings {
+  /** Convert multiline clipboard to single line when pasting */
+  pasteMultilineAsSingleLine?: boolean;
+  /** Character to join lines with (default: space) */
+  multilineJoinChar?: string;
+}
+
 export interface AppSettings {
   defaultShell: ShellType;
   theme: 'dark' | 'light';
   keyboardShortcuts?: ShortcutConfig;
   webUI?: WebUISettings;
   predefinedTerminals?: PredefinedTerminal[];
+  clipboard?: ClipboardSettings;
 }
 
 // All available shortcuts with their definitions
@@ -265,7 +274,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
     allowRemote: false,
     showQRCode: true
   },
-  predefinedTerminals: []
+  predefinedTerminals: [],
+  clipboard: {
+    pasteMultilineAsSingleLine: false,
+    multilineJoinChar: ' '
+  }
 };
 
 export const DEFAULT_CONFIG: AppConfig = {

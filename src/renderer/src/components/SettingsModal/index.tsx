@@ -374,6 +374,58 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   </select>
                 </div>
               </div>
+              
+              <div className="settings-group">
+                <h3 className="settings-group-title">Clipboard</h3>
+                <p className="settings-group-description">
+                  Configure how text is pasted into the terminal.
+                </p>
+                <div className="settings-item">
+                  <span className="settings-item-label">Paste Multiline as Single Line</span>
+                  <label className="settings-toggle">
+                    <input
+                      type="checkbox"
+                      checked={settings.clipboard?.pasteMultilineAsSingleLine || false}
+                      onChange={(e) => useAppStore.getState().updateSettings({ 
+                        clipboard: { 
+                          ...DEFAULT_SETTINGS.clipboard, 
+                          ...settings.clipboard, 
+                          pasteMultilineAsSingleLine: e.target.checked 
+                        } 
+                      })}
+                    />
+                    <span className="settings-toggle-slider"></span>
+                  </label>
+                  <span className="settings-item-hint">
+                    Convert multiline clipboard content to a single line when pasting
+                  </span>
+                </div>
+                
+                {settings.clipboard?.pasteMultilineAsSingleLine && (
+                  <div className="settings-item">
+                    <span className="settings-item-label">Line Join Character</span>
+                    <select
+                      className="settings-select"
+                      value={settings.clipboard?.multilineJoinChar || ' '}
+                      onChange={(e) => useAppStore.getState().updateSettings({ 
+                        clipboard: { 
+                          ...DEFAULT_SETTINGS.clipboard, 
+                          ...settings.clipboard, 
+                          multilineJoinChar: e.target.value 
+                        } 
+                      })}
+                    >
+                      <option value=" ">Space</option>
+                      <option value="  ">Two Spaces</option>
+                      <option value=" \\ ">Backslash + Space (shell continuation)</option>
+                      <option value="">No separator</option>
+                    </select>
+                    <span className="settings-item-hint">
+                      Character used to join lines when pasting multiline content
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           )}
           
