@@ -40,6 +40,12 @@ export interface WebUISettings {
   pin: string;
   allowRemote: boolean;
   showQRCode: boolean;
+  tunnel?: TunnelSettings;
+}
+
+// Cloudflare Tunnel settings
+export interface TunnelSettings {
+  enabled: boolean;
 }
 
 // Keyboard shortcut types
@@ -272,7 +278,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
     port: 3000,
     pin: '',
     allowRemote: false,
-    showQRCode: true
+    showQRCode: true,
+    tunnel: {
+      enabled: false
+    }
   },
   predefinedTerminals: [],
   clipboard: {

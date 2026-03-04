@@ -7,3 +7,4 @@
 
 export * from './types'
 export { OpenCodeSessionWatcher, getOpenCodeWatcher } from './session-watcher'
+export { ensureOpenCodePlugin, isPluginInstalled, uninstallOpenCodePlugin } from './plugin-installer'

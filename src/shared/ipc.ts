@@ -26,6 +26,8 @@ export const IPC_CHANNELS = {
   TERMINAL_RESTART: 'terminal:restart',
   TERMINAL_WRITE: 'terminal:write',
   TERMINAL_RESIZE: 'terminal:resize',
+  TERMINAL_PAUSE: 'terminal:pause',
+  TERMINAL_RESUME: 'terminal:resume',
   
   // Terminal events (main -> renderer)
   TERMINAL_DATA: 'terminal:data',
@@ -53,6 +55,7 @@ export const IPC_CHANNELS = {
 
   // File system operations
   FS_READ_DIR: 'fs:read-dir',
+  FS_READ_FILE: 'fs:read-file',
    
   // Web UI operations
   WEBUI_START: 'webui:start',
@@ -60,11 +63,20 @@ export const IPC_CHANNELS = {
   WEBUI_STATUS: 'webui:status',
   WEBUI_REGENERATE_PIN: 'webui:regenerate-pin',
   
+  // Tunnel operations
+  TUNNEL_START: 'tunnel:start',
+  TUNNEL_STOP: 'tunnel:stop',
+  TUNNEL_STATUS: 'tunnel:status',
+  
   // OpenCode session operations
   OPENCODE_SESSIONS: 'opencode:sessions',
   OPENCODE_SESSION_BY_DIR: 'opencode:session-by-dir',
   OPENCODE_STATUS: 'opencode:status',
   OPENCODE_EVENT: 'opencode:event',  // Main -> renderer event
+  
+  // Notifications (main -> renderer)
+  NOTIFICATION_SHOW: 'notification:show',
+  NOTIFICATION_DISMISS: 'notification:dismiss',
 } as const;
 
 // Terminal spawn configuration
@@ -133,6 +145,13 @@ export interface WebUIStatus {
   qrCode?: string;
 }
 
+// Tunnel status
+export interface TunnelStatus {
+  running: boolean;
+  url?: string;
+  error?: string;
+}
+
 // File system entry
 export interface FileEntry {
   name: string;
@@ -173,5 +192,16 @@ export interface OpenCodeSessionEvent {
   type: 'sessions-updated' | 'status-changed';
   sessions?: OpenCodeSessionInfo[];
   status?: OpenCodeWatcherStatus;
+}
+
+// Notification types
+export interface AppNotification {
+  id: string;
+  title: string;
+  body?: string;
+  type: 'info' | 'success' | 'warning' | 'error';
+  terminalId?: string;
+  timestamp: number;
+  duration?: number; // ms, 0 = persistent
 }
 

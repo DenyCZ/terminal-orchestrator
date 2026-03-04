@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC_CHANNELS } from '@shared/ipc'
-import type { TerminalDataBatch, TerminalExitEvent, PtyConfig, WorktreeCreateOptions, WorktreeCreateResult, GitBranch, WebUIStatus, FileEntry, ReadDirOptions, OpenCodeSessionInfo, OpenCodeWatcherStatus, OpenCodeSessionEvent } from '@shared/ipc'
+import type { TerminalDataBatch, TerminalExitEvent, WorktreeCreateOptions, WorktreeCreateResult, GitBranch, WebUIStatus, TunnelStatus, FileEntry, ReadDirOptions, OpenCodeSessionInfo, OpenCodeWatcherStatus, OpenCodeSessionEvent, AppNotification } from '@shared/ipc'
 import type { Project, ProjectGroup, Terminal, AppConfig, AppSettings, DetectedShell, ShellType } from '@shared/types'
 
 // Exposed API to renderer
@@ -74,6 +74,12 @@ const electronAPI = {
     resize: (terminalId: string, cols: number, rows: number): void =>
       ipcRenderer.send(IPC_CHANNELS.TERMINAL_RESIZE, terminalId, cols, rows),
 
+    pause: (terminalId: string): void =>
+      ipcRenderer.send(IPC_CHANNELS.TERMINAL_PAUSE, terminalId),
+
+    resume: (terminalId: string): void =>
+      ipcRenderer.send(IPC_CHANNELS.TERMINAL_RESUME, terminalId),
+
     // Event listeners
     onData: (callback: (data: TerminalDataBatch) => void) => {
       const listener = (_: unknown, data: TerminalDataBatch) => callback(data)
@@ -126,7 +132,10 @@ const electronAPI = {
   // File system operations
   fs: {
     readDir: (options: ReadDirOptions): Promise<FileEntry[]> =>
-      ipcRenderer.invoke(IPC_CHANNELS.FS_READ_DIR, options)
+      ipcRenderer.invoke(IPC_CHANNELS.FS_READ_DIR, options),
+    readFile: (filePath: string): Promise<string> =>
+      ipcRenderer.invoke(IPC_CHANNELS.FS_READ_FILE, filePath)
+
   },
 
   // Web UI operations
@@ -139,6 +148,16 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.WEBUI_STATUS),
     regeneratePin: (): Promise<{ pin: string }> =>
       ipcRenderer.invoke(IPC_CHANNELS.WEBUI_REGENERATE_PIN)
+  },
+
+  // Tunnel operations
+  tunnel: {
+    start: (): Promise<{ success: boolean; url?: string; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.TUNNEL_START),
+    stop: (): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.TUNNEL_STOP),
+    getStatus: (): Promise<TunnelStatus> =>
+      ipcRenderer.invoke(IPC_CHANNELS.TUNNEL_STATUS)
   },
 
   // OpenCode session operations
@@ -158,6 +177,20 @@ const electronAPI = {
     }
   },
 
+  // Notification operations
+  notification: {
+    // Event listener for notifications from main process
+    onShow: (callback: (notification: AppNotification) => void) => {
+      const listener = (_: unknown, notification: AppNotification) => callback(notification)
+      ipcRenderer.on(IPC_CHANNELS.NOTIFICATION_SHOW, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.NOTIFICATION_SHOW, listener)
+    },
+    
+    // Dismiss a notification
+    dismiss: (id: string): void =>
+      ipcRenderer.send(IPC_CHANNELS.NOTIFICATION_DISMISS, id)
+  },
+
   // Initialize main window reference
   init: (): void => ipcRenderer.send('set-main-window'),
 
@@ -165,11 +198,6 @@ const electronAPI = {
   getPathForFile: (file: File): string => webUtils.getPathForFile(file)
 }
 
-declare global {
-  interface Window {
-    electronAPI: typeof electronAPI
-  }
-}
 
 if (process.contextIsolated) {
   try {

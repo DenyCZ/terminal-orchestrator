@@ -1,5 +1,5 @@
 import type { Project, ProjectGroup, Terminal, AppConfig, AppSettings, DetectedShell, ShellType } from '@shared/types'
-import type { TerminalDataBatch, TerminalExitEvent, WorktreeCreateOptions, WorktreeCreateResult, GitBranch, WebUIStatus, FileEntry, ReadDirOptions, OpenCodeSessionInfo, OpenCodeWatcherStatus, OpenCodeSessionEvent } from '@shared/ipc'
+import type { TerminalDataBatch, TerminalExitEvent, WorktreeCreateOptions, WorktreeCreateResult, GitBranch, WebUIStatus, TunnelStatus, FileEntry, ReadDirOptions, OpenCodeSessionInfo, OpenCodeWatcherStatus, OpenCodeSessionEvent, AppNotification } from '@shared/ipc'
 
 export interface ElectronAPI {
   group: {
@@ -37,6 +37,8 @@ export interface ElectronAPI {
     restart: (projectId: string, terminalId: string) => Promise<{ pid: number } | undefined>
     write: (terminalId: string, data: string) => void
     resize: (terminalId: string, cols: number, rows: number) => void
+    pause: (terminalId: string) => void
+    resume: (terminalId: string) => void
     onData: (callback: (data: TerminalDataBatch) => void) => () => void
     onExit: (callback: (event: TerminalExitEvent) => void) => () => void
   }
@@ -62,6 +64,7 @@ export interface ElectronAPI {
 
   fs: {
     readDir: (options: ReadDirOptions) => Promise<FileEntry[]>
+    readFile: (filePath: string) => Promise<string>
   }
   
   webui: {
@@ -71,11 +74,22 @@ export interface ElectronAPI {
     regeneratePin: () => Promise<{ pin: string }>
   }
   
+  tunnel: {
+    start: () => Promise<{ success: boolean; url?: string; error?: string }>
+    stop: () => Promise<{ success: boolean }>
+    getStatus: () => Promise<TunnelStatus>
+  }
+  
   opencode: {
     getSessions: () => Promise<OpenCodeSessionInfo[]>
     getSessionByDir: (directory: string) => Promise<OpenCodeSessionInfo | null>
     getStatus: () => Promise<OpenCodeWatcherStatus>
     onEvent: (callback: (event: OpenCodeSessionEvent) => void) => () => void
+  }
+  
+  notification: {
+    onShow: (callback: (notification: AppNotification) => void) => () => void
+    dismiss: (id: string) => void
   }
   
   init: () => void

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { ConfigStore } from '../store';
 import type { PtyManager } from '../pty';
-import type { ServerConfig } from './types';
+import type { ServerConfig, TunnelInfo } from './types';
 import * as qrcode from 'qrcode';
 import { detectShells } from '../shell-detector';
 import { startTerminalProcess } from '../terminal-helpers';
@@ -32,7 +32,8 @@ function getLocalAddresses(): string[] {
 export function createRoutes(
   config: ServerConfig,
   store: ConfigStore,
-  ptyManager: PtyManager
+  ptyManager: PtyManager,
+  getTunnelInfo?: () => TunnelInfo | undefined
 ): Router {
   const router = Router();
   
@@ -53,12 +54,16 @@ export function createRoutes(
       }
     }
     
+    // Get tunnel info if available
+    const tunnel = getTunnelInfo?.();
+    
     res.json({
       running: true,
       port: config.port,
       addresses,
       url,
-      qrCode: qrCodeData
+      qrCode: qrCodeData,
+      tunnel
     });
   });
   

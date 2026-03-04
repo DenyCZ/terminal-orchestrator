@@ -140,6 +140,36 @@ export function TerminalView({ terminal, project, ws, api, onBack }: TerminalVie
       ws.sendInput(terminal.id, data)
     })
     
+    // Handle Ctrl+wheel zoom and TUI app scrolling
+    term.attachCustomWheelEventHandler((event) => {
+      if (event.ctrlKey) {
+        const delta = event.deltaY > 0 ? -1 : 1
+        const currentSize = term.options.fontSize || 14
+        const newSize = Math.max(8, Math.min(32, currentSize + delta))
+        term.options.fontSize = newSize
+        requestAnimationFrame(() => {
+          fitAddonRef.current?.fit()
+          if (terminalRef.current) {
+            const { cols, rows } = terminalRef.current
+            ws.sendResize(terminal.id, cols, rows)
+          }
+        })
+        return false
+      }
+
+      // In alternate buffer mode (TUI apps), send cursor key sequences for scrolling
+      const buffer = term.buffer.active
+      if (buffer.type === 'alternate') {
+        const lines = event.deltaY > 0 ? 3 : -3
+        for (let i = 0; i < Math.abs(lines); i++) {
+          const sequence = lines > 0 ? '\x1bOB' : '\x1bOA'
+          ws.sendInput(terminal.id, sequence)
+        }
+        return false
+      }
+      return true
+    })
+    
     // FIX: Debounced resize handler
     let resizeTimeout: ReturnType<typeof setTimeout> | null = null
     let lastCols = 0

@@ -4,6 +4,9 @@ import type { ConfigStore } from '../store';
 import type { PtyManager } from '../pty';
 import type { WebSocketMessage, TerminalSession } from './types';
 import type { TerminalStatus } from '@shared/types';
+// Memory protection constants
+const MAX_WS_SESSIONS = 100
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000 // 30 minutes
 
 /**
  * Safely extract remote address from WebSocket
@@ -20,8 +23,10 @@ export class WebSocketTerminalServer {
   private store: ConfigStore;
   private ptyManager: PtyManager;
   private sessions: Map<string, TerminalSession> = new Map();
+  private sessionLastActive: Map<string, number> = new Map(); // Track idle sessions
   private validTokens: Set<string>;
-  
+  private cleanupInterval?: NodeJS.Timeout;
+
   constructor(store: ConfigStore, ptyManager: PtyManager, validTokens: Set<string>) {
     this.store = store;
     this.ptyManager = ptyManager;
@@ -44,7 +49,14 @@ export class WebSocketTerminalServer {
         return;
       }
       
-      console.log('WebSocket client connected');
+      // Check session limit
+      if (this.sessions.size >= MAX_WS_SESSIONS) {
+        console.warn(`WebSocket connection rejected: max sessions (${MAX_WS_SESSIONS}) reached`);
+        ws.close(1013, 'Server busy - max connections reached');
+        return;
+      }
+
+      console.log(`WebSocket client connected (${this.sessions.size + 1}/${MAX_WS_SESSIONS})`);
       
       ws.on('message', (data) => {
         try {
@@ -70,6 +82,12 @@ export class WebSocketTerminalServer {
   }
   
   private handleMessage(ws: WebSocket, message: WebSocketMessage): void {
+    // Track activity for idle timeout
+    const sessionKey = this.findSessionKey(ws);
+    if (sessionKey) {
+      this.sessionLastActive.set(sessionKey, Date.now());
+    }
+
     switch (message.type) {
       case 'subscribe':
         if (message.terminalId) {
@@ -130,6 +148,7 @@ export class WebSocketTerminalServer {
     };
     
     this.sessions.set(sessionKey, session);
+    this.sessionLastActive.set(sessionKey, Date.now());
     
     console.log(`Client subscribed to terminal ${terminalId}`);
     
@@ -151,6 +170,7 @@ export class WebSocketTerminalServer {
     if (session) {
       session.unsubscribeCallbacks.forEach(cb => cb());
       this.sessions.delete(sessionKey);
+      this.sessionLastActive.delete(sessionKey);
       console.log(`Client unsubscribed from terminal ${terminalId}`);
     }
   }
@@ -165,9 +185,24 @@ export class WebSocketTerminalServer {
       }
     }
     
-    keysToDelete.forEach(key => this.sessions.delete(key));
+    keysToDelete.forEach(key => {
+      this.sessions.delete(key);
+      this.sessionLastActive.delete(key);
+    });
   }
-  
+
+  /**
+   * Find session key by WebSocket reference
+   */
+  private findSessionKey(ws: WebSocket): string | undefined {
+    for (const [key, session] of this.sessions.entries()) {
+      if (session.ws === ws) {
+        return key;
+      }
+    }
+    return undefined;
+  }
+
   private sendMessage(ws: WebSocket, message: WebSocketMessage): void {
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(message));
@@ -208,9 +243,52 @@ export class WebSocketTerminalServer {
   }
   
   close(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = undefined;
+    }
     if (this.wss) {
       this.wss.close();
     }
     this.sessions.clear();
+    this.sessionLastActive.clear();
+  }
+
+  /**
+   * Start periodic cleanup of idle sessions
+   */
+  startIdleCleanup(): void {
+    this.cleanupInterval = setInterval(() => {
+      const now = Date.now();
+      const expiredKeys: string[] = [];
+
+      for (const [key, lastActive] of this.sessionLastActive.entries()) {
+        if (now - lastActive > SESSION_TIMEOUT_MS) {
+          expiredKeys.push(key);
+        }
+      }
+
+      for (const key of expiredKeys) {
+        const session = this.sessions.get(key);
+        if (session) {
+          console.log(`Closing idle WebSocket session: ${key}`);
+          session.unsubscribeCallbacks.forEach(cb => cb());
+          session.ws.close(1001, 'Session timed out');
+          this.sessions.delete(key);
+        }
+        this.sessionLastActive.delete(key);
+      }
+
+      if (expiredKeys.length > 0) {
+        console.log(`Cleaned up ${expiredKeys.length} idle WebSocket sessions`);
+      }
+    }, 60000); // Check every minute
+  }
+
+  /**
+   * Get current session count for monitoring
+   */
+  getSessionCount(): number {
+    return this.sessions.size;
   }
 }

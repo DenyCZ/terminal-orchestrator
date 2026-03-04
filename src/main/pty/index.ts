@@ -5,8 +5,13 @@ import fs from 'fs'
 import path from 'path'
 import os from 'os'
 import type { ShellType, TerminalStatus } from '@shared/types'
-import type { PtyConfig } from '@shared/ipc'
+import type { PtyConfig, AppNotification } from '@shared/ipc'
+import { IPC_CHANNELS } from '@shared/ipc'
 import { detectShells } from '../shell-detector'
+
+// OSC 777 notification pattern: ESC ] 777 ; notify ; Title ; Body BEL
+// Format: \x1b]777;notify;Title;Body\x07
+const OSC_777_NOTIFY_REGEX = /\x1b\]777;notify;([^;]*);([^\x07]*)\x07/g
 
 // Interface for WebSocket broadcaster (to avoid circular dependency)
 export interface ITerminalDataBroadcaster {
@@ -29,6 +34,8 @@ interface PtySession {
   terminalId: string
   pty: IPty
   pid: number
+  paused: boolean  // Flow control flag
+  pausedBuffer: string[]  // Buffer for data received while paused
 }
 
 // Data sender - sends terminal data immediately to avoid splitting escape sequences
@@ -153,35 +160,63 @@ async function createPty(
   const validCwd = validateCwd(options.cwd)
   console.log(`Creating PTY with cwd: "${validCwd}" (original: "${options.cwd}")`)
 
-  try {
-    const pty = await import('@lydell/node-pty')
+  const MAX_RETRIES = 3
+  let lastError: Error | null = null
 
-    const ptyOptions: PtySpawnOptions = {
-      name: 'xterm-256color',
-      cols: options.cols,
-      rows: options.rows,
-      cwd: validCwd,
-      env: options.env
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      const pty = await import('@lydell/node-pty')
+
+      const ptyOptions: PtySpawnOptions = {
+        name: 'xterm-256color',
+        cols: options.cols,
+        rows: options.rows,
+        cwd: validCwd,
+        env: options.env
+      }
+
+      if (process.platform !== 'win32') {
+        ptyOptions.encoding = 'utf8'
+      }
+
+      return pty.spawn(shell, args, ptyOptions)
+    } catch (error) {
+      lastError = error as Error
+      console.warn(`PTY spawn attempt ${attempt + 1} failed:`, error)
+      
+      // If we have retries left, wait with exponential backoff
+      if (attempt < MAX_RETRIES - 1) {
+        await new Promise(resolve => setTimeout(resolve, 100 * (attempt + 1)))
+      }
     }
-
-    if (process.platform !== 'win32') {
-      ptyOptions.encoding = 'utf8'
-    }
-
-    return pty.spawn(shell, args, ptyOptions)
-  } catch (error) {
-    console.warn('node-pty not available, falling back to child_process:', error)
-
-    const proc = spawn(shell, args, {
-      cwd: validCwd,
-      env: options.env,
-      stdio: ['pipe', 'pipe', 'pipe']
-    })
-
-    return new ChildProcessPty(proc)
   }
+
+  // All retries failed, fall back to child_process
+  console.warn('node-pty not available after retries, falling back to child_process:', lastError)
+
+  const proc = spawn(shell, args, {
+    cwd: validCwd,
+    env: options.env,
+    stdio: ['pipe', 'pipe', 'pipe']
+  })
+
+  return new ChildProcessPty(proc)
 }
 
+// Session limit to prevent resource exhaustion
+const MAX_CONCURRENT_SESSIONS = 50
+
+// Max buffer size for paused terminals (256KB) - prevents memory exhaustion
+const MAX_PAUSED_BUFFER_BYTES = 256 * 1024
+
+// Metrics for observability
+export interface PtyMetrics {
+  totalSpawned: number
+  failedSpawns: number
+  activeSessions: number
+  bytesEmitted: number
+  pausesTriggered: number
+}
 export class PtyManager {
   private static instance: PtyManager
   private sessions: Map<string, PtySession> = new Map()
@@ -189,7 +224,13 @@ export class PtyManager {
   private window: BrowserWindow | null = null
   private ptyAvailable: boolean | null = null
   private wsServer: ITerminalDataBroadcaster | null = null
-
+  private metrics: PtyMetrics = {
+    totalSpawned: 0,
+    failedSpawns: 0,
+    activeSessions: 0,
+    bytesEmitted: 0,
+    pausesTriggered: 0
+  }
   private constructor() {
     this.dataSender = createDataSender()
     this.checkPtyAvailability()
@@ -309,28 +350,91 @@ export class PtyManager {
   }
 
   async spawn(config: PtyConfig): Promise<{ terminalId: string; pid: number }> {
+    // Check session limit
+    if (this.sessions.size >= MAX_CONCURRENT_SESSIONS) {
+      this.metrics.failedSpawns++
+      throw new Error(`Maximum concurrent sessions (${MAX_CONCURRENT_SESSIONS}) reached`)
+    }
+
     const { shell, args: shellArgs } = this.getShell(config.shellType)
     const session = uuid()
 
-    const ptyProcess = await createPty(shell, shellArgs, {
-      cols: config.cols,
-      rows: config.rows,
-      cwd: config.cwd,
-      env: { ...process.env, ...(config.env || {}) } as Record<string, string>
-    })
+    let ptyProcess: IPty
+    try {
+      // Build environment with improved terminal/agent compatibility settings
+      const terminalEnv: Record<string, string> = {
+        ...process.env,
+        // Terminal identification for proper color/feature support
+        TERM: 'xterm-256color',
+        COLORTERM: 'truecolor',
+        // Kitty window ID for some terminal features
+        KITTY_WINDOW_ID: '1',
+        // Claude Code allow-list hack - pretend to be ghostty
+        TERM_PROGRAM: 'ghostty',
+        TERM_PROGRAM_VERSION: '3.0.0',
+        // Override with any custom env from config
+        ...(config.env || {})
+      } as Record<string, string>
+      
+      // Remove CLAUDECODE to prevent nested-session detection
+      delete terminalEnv.CLAUDECODE
+      
+      ptyProcess = await createPty(shell, shellArgs, {
+        cols: config.cols,
+        rows: config.rows,
+        cwd: config.cwd,
+        env: terminalEnv
+      })
+      this.metrics.totalSpawned++
+    } catch (error) {
+      this.metrics.failedSpawns++
+      throw error
+    }
 
     const ptySession: PtySession = {
       id: session,
       terminalId: config.terminalId,
       pty: ptyProcess,
-      pid: ptyProcess.pid
+      pid: ptyProcess.pid,
+      paused: false,  // Initialize as not paused
+      pausedBuffer: []  // Buffer for data received while paused
     }
 
-    // Setup data handling - send immediately to avoid splitting escape sequences
+    // Setup data handling - buffer data when paused, send when not
     ptyProcess.onData((data) => {
-      this.dataSender.sendData(config.terminalId, data)
+      const session = this.sessions.get(config.terminalId)
+      if (!session) return
+      
+      if (session.paused) {
+        // Buffer data while paused - will be flushed on resume
+        session.pausedBuffer.push(data)
+        
+        // Cap buffer size to prevent memory exhaustion
+        const bufferSize = session.pausedBuffer.reduce((sum, chunk) => sum + chunk.length, 0)
+        if (bufferSize > MAX_PAUSED_BUFFER_BYTES) {
+          // Drop oldest chunks when over limit
+          while (
+            session.pausedBuffer.reduce((sum, chunk) => sum + chunk.length, 0) > MAX_PAUSED_BUFFER_BYTES &&
+            session.pausedBuffer.length > 1
+          ) {
+            session.pausedBuffer.shift()
+          }
+        }
+        return
+      }
+      
+      // Detect OSC 777 notifications before sending to terminal
+      this.detectAndEmitNotifications(data, config.terminalId)
+      
+      // Track bytes for metrics
+      this.metrics.bytesEmitted += data.length
+      
+      // Strip OSC 777 sequences from data before sending to terminal
+      const cleanData = data.replace(OSC_777_NOTIFY_REGEX, '')
+      
+      this.dataSender.sendData(config.terminalId, cleanData)
       // Also broadcast to WebSocket clients
-      this.wsServer?.broadcastToTerminal(config.terminalId, data)
+      this.wsServer?.broadcastToTerminal(config.terminalId, cleanData)
     })
 
     // Handle exit
@@ -379,20 +483,37 @@ export class PtyManager {
   kill(terminalId: string): void {
     const session = this.sessions.get(terminalId)
     if (session) {
+      // Graceful shutdown: Send Ctrl-C first
       try {
-        session.pty.kill()
-      } catch (error) {
-        console.warn(`Kill failed for terminal ${terminalId}:`, error)
+        session.pty.write('\x03')
+      } catch {
+        // Ignore write errors
       }
+      
+      // Wait a brief moment for graceful exit, then force kill
+      setTimeout(() => {
+        try {
+          session.pty.kill()
+        } catch (error) {
+          console.warn(`Kill failed for terminal ${terminalId}:`, error)
+        }
+      }, 100)
+      
       this.dataSender.clear(terminalId)
       this.sessions.delete(terminalId)
     }
   }
 
   killAll(): void {
-    for (const terminalId of this.sessions.keys()) {
-      this.kill(terminalId)
+    // Synchronous kill for app shutdown - no delays
+    for (const [terminalId, session] of this.sessions) {
+      try {
+        session.pty.kill()
+      } catch (error) {
+        console.warn(`Kill failed for terminal ${terminalId}:`, error)
+      }
     }
+    this.sessions.clear()
     this.dataSender.clearAll()
   }
 
@@ -406,5 +527,82 @@ export class PtyManager {
 
   isPtyAvailable(): boolean | null {
     return this.ptyAvailable
+  }
+
+  // Flow control: pause PTY output
+  pause(terminalId: string): void {
+    const session = this.sessions.get(terminalId)
+    if (session && !session.paused) {
+      session.paused = true
+      this.metrics.pausesTriggered++
+    }
+  }
+
+  // Flow control: resume PTY output and flush buffered data
+  // IMPORTANT: Always flush buffer and set paused=false to handle race conditions
+  resume(terminalId: string): void {
+    const session = this.sessions.get(terminalId)
+    if (session) {
+      // Always set paused to false to ensure we don't get stuck
+      const wasPaused = session.paused
+      session.paused = false
+      
+      // Flush buffered data if any (buffer could have data even if wasPaused is false due to race conditions)
+      if (session.pausedBuffer.length > 0) {
+        const bufferedData = session.pausedBuffer.join('')
+        session.pausedBuffer = []
+        
+        // Track bytes for metrics
+        this.metrics.bytesEmitted += bufferedData.length
+        
+        this.dataSender.sendData(terminalId, bufferedData)
+        this.wsServer?.broadcastToTerminal(terminalId, bufferedData)
+      }
+    }
+  }
+
+  // Check if at session capacity
+  isAtCapacity(): boolean {
+    return this.sessions.size >= MAX_CONCURRENT_SESSIONS
+  }
+
+  // Get metrics for observability
+  getMetrics(): PtyMetrics {
+    return {
+      ...this.metrics,
+      activeSessions: this.sessions.size
+    }
+  }
+
+  /**
+   * Detect OSC 777 notifications in PTY output and emit to renderer.
+   * Format: ESC ] 777 ; notify ; Title ; Body BEL
+   */
+  private detectAndEmitNotifications(data: string, terminalId: string): void {
+    // Reset regex lastIndex for global regex
+    OSC_777_NOTIFY_REGEX.lastIndex = 0
+    
+    let match
+    while ((match = OSC_777_NOTIFY_REGEX.exec(data)) !== null) {
+      const [, title, body] = match
+      
+      // Create notification
+      const notification: AppNotification = {
+        id: uuid(),
+        title: title || 'Notification',
+        body: body || undefined,
+        type: 'info',
+        terminalId,
+        timestamp: Date.now(),
+        duration: 5000 // 5 seconds default
+      }
+      
+      // Emit to renderer
+      if (this.window && !this.window.isDestroyed()) {
+        this.window.webContents.send(IPC_CHANNELS.NOTIFICATION_SHOW, notification)
+      }
+      
+      console.log('[PTY] OSC 777 notification:', title, body)
+    }
   }
 }

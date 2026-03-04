@@ -3,13 +3,15 @@ import { WebServer } from './web-server';
 import { WebSocketTerminalServer } from './ws-server';
 import { ConfigStore } from './store';
 import { PtyManager } from './pty';
-import type { WebUISettings, TerminalStatus } from '@shared/types';
+import { CloudflareTunnel } from './tunnel';
+import type { WebUISettings, TerminalStatus, TunnelSettings } from '@shared/types';
 import type { ITerminalDataBroadcaster } from './pty';
 
 export class WebUIManager implements ITerminalDataBroadcaster {
   private static instance: WebUIManager;
   private webServer?: WebServer;
   private wsServer?: WebSocketTerminalServer;
+  private tunnel?: CloudflareTunnel;
   private store: ConfigStore;
   private ptyManager: PtyManager;
   
@@ -68,10 +70,16 @@ export class WebUIManager implements ITerminalDataBroadcaster {
       const server = this.webServer.getServer();
       if (server) {
         this.wsServer.attachToServer(server);
+        this.wsServer.startIdleCleanup(); // Start idle session cleanup
         this.ptyManager.setWebSocketServer(this);
       }
       
       console.log('Web UI started successfully');
+      
+      // Start tunnel if enabled
+      if (settings.tunnel?.enabled) {
+        await this.startTunnel();
+      }
     } catch (error) {
       console.error('Failed to start Web UI:', error);
       throw error;
@@ -80,6 +88,7 @@ export class WebUIManager implements ITerminalDataBroadcaster {
   
   async stop(): Promise<void> {
     this.ptyManager.setWebSocketServer(null);
+    this.stopTunnel();
     this.wsServer?.close();
     await this.webServer?.stop();
     this.wsServer = undefined;
@@ -133,5 +142,53 @@ export class WebUIManager implements ITerminalDataBroadcaster {
   
   broadcastStatus(terminalId: string, status: TerminalStatus): void {
     this.wsServer?.broadcastStatus(terminalId, status);
+  }
+  
+  // Tunnel management
+  async startTunnel(): Promise<string> {
+    if (!this.webServer?.isRunning()) {
+      throw new Error('Web server must be running to start tunnel');
+    }
+    
+    if (this.tunnel?.isRunning()) {
+      return this.tunnel.getUrl()!;
+    }
+    
+    // Check if cloudflared is available
+    const available = await CloudflareTunnel.isAvailable();
+    if (!available) {
+      throw new Error('cloudflared is not installed. Install it from: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/');
+    }
+    
+    this.tunnel = new CloudflareTunnel();
+    
+    const port = this.webServer.getPort();
+    const url = await this.tunnel.start(port);
+    
+    // Update web server with tunnel info
+    this.webServer.setTunnelInfo({ running: true, url });
+    
+    console.log(`Cloudflare tunnel started: ${url}`);
+    return url;
+  }
+  
+  stopTunnel(): void {
+    if (this.tunnel) {
+      this.tunnel.stop();
+      this.tunnel = undefined;
+      this.webServer?.setTunnelInfo({ running: false });
+      console.log('Cloudflare tunnel stopped');
+    }
+  }
+  
+  getTunnelStatus(): { running: boolean; url?: string; error?: string } {
+    if (!this.tunnel) {
+      return { running: false };
+    }
+    return this.tunnel.getStatus();
+  }
+  
+  isTunnelRunning(): boolean {
+    return this.tunnel?.isRunning() ?? false;
   }
 }

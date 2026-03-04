@@ -258,6 +258,16 @@ export const deleteTerminal = (projectId: string, terminalId: string): boolean =
   return true
 }
 
+// Clear all terminals from all projects (for cleanup on app start)
+export const clearAllTerminals = (): void => {
+  const config = getConfig()
+  config.projects.forEach(project => {
+    project.terminals = []
+    project.updatedAt = Date.now()
+  })
+  saveConfig(config)
+}
+
 // Settings
 export const getSettings = () => {
   const settings = getConfig().settings

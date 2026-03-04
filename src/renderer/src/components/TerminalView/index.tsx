@@ -22,6 +22,17 @@ interface CachedTerminal {
 // Global cache shared across all TerminalView instances
 const terminalCache = new Map<string, CachedTerminal>()
 
+// Flow control watermarks (bytes pending in xterm.js write queue)
+// Prevents memory overflow when AI agents output rapidly
+const HIGH_WATERMARK = 512 * 1024  // 512KB — pause reader when exceeded
+const LOW_WATERMARK = 128 * 1024   // 128KB — resume reader when drained below
+
+// Pre-open output buffer limits
+const OUTPUT_BUFFER_MAX_BYTES = 100 * 1024  // 100KB max buffer before terminal.open()
+
+// Minimum fit dimensions to prevent WebGL artifacts
+const MIN_FIT_WIDTH = 80   // px (~5 columns at 14px)
+const MIN_FIT_HEIGHT = 40  // px (~2 rows)
 interface TerminalViewProps {
   terminal: TerminalType
   projectId: string
@@ -69,6 +80,17 @@ function TerminalView({
   const isUserAtBottomRef = useRef(true)
   const scrollDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   
+  // Flow control refs - prevents memory overflow when AI agents output rapidly
+  const pendingWriteBytesRef = useRef(0)
+  const isPausedRef = useRef(false)
+  
+  // Pre-open output buffer - holds data until terminal.open() is called
+  const outputBufferRef = useRef<string[]>([])
+  const outputBufferBytesRef = useRef(0)
+  
+  // Two-tier resize debounce refs
+  const resizeObserverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const onResizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // File explorer state
   const [showFileExplorer, setShowFileExplorer] = useState(false)
   const [explorerWidth, setExplorerWidth] = useState(250)
@@ -106,16 +128,92 @@ function TerminalView({
     }, 50)
   }, [])
 
-  // Write directly to terminal - xterm.js handles buffering internally
-  // IMPORTANT: We must write data atomically to avoid splitting escape sequences
-  // Buffering with requestAnimationFrame can split multi-byte ANSI escape sequences
-  // causing characters to appear stuck on the left side of the terminal
-  const writeToTerminal = useCallback((data: string) => {
-    if (terminalRef.current) {
-      terminalRef.current.write(data)
-      scrollToBottomDebounced()
+  // Safe fit with minimum dimensions guard
+  // Prevents WebGL artifacts when terminal is squeezed into small panes
+  const safeFit = useCallback(() => {
+    if (!containerRef.current || !fitAddonRef.current || !terminalRef.current) return
+    
+    // Guard against undersized containers
+    if (
+      containerRef.current.offsetWidth < MIN_FIT_WIDTH ||
+      containerRef.current.offsetHeight < MIN_FIT_HEIGHT
+    ) {
+      return // Skip fit for tiny containers
     }
-  }, [scrollToBottomDebounced])
+    
+    fitAddonRef.current.fit()
+  }, [])
+
+  // Replay buffered output into the terminal
+  const replayBuffer = useCallback(() => {
+    if (terminalRef.current && outputBufferRef.current.length > 0) {
+      for (const chunk of outputBufferRef.current) {
+        terminalRef.current.write(chunk)
+      }
+      outputBufferRef.current = []
+      outputBufferBytesRef.current = 0
+    }
+  }, [])
+
+  // Write to terminal with flow control - prevents memory overflow
+  // When AI agents output rapidly, xterm.js can't keep up -> memory explosion
+  // This tracks pending bytes and pauses/resumes the PTY accordingly
+  const writeToTerminalWithFlowControl = useCallback((data: string) => {
+    if (!terminalRef.current) {
+      // Buffer until terminal is open (pre-open buffer)
+      outputBufferRef.current.push(data)
+      outputBufferBytesRef.current += data.length
+      // Cap buffer: drop oldest chunks when over limit
+      while (
+        outputBufferBytesRef.current > OUTPUT_BUFFER_MAX_BYTES &&
+        outputBufferRef.current.length > 1
+      ) {
+        const dropped = outputBufferRef.current.shift()!
+        outputBufferBytesRef.current -= dropped.length
+      }
+      return
+    }
+
+    const byteLen = data.length
+    pendingWriteBytesRef.current += byteLen
+
+    // Pause PTY if buffer is too full (flow control)
+    if (!isPausedRef.current && pendingWriteBytesRef.current > HIGH_WATERMARK) {
+      isPausedRef.current = true
+      window.electronAPI?.terminal.pause(terminal.id)
+    }
+
+    terminalRef.current.write(data, () => {
+      pendingWriteBytesRef.current -= byteLen
+
+      // Resume PTY when buffer drains below threshold
+      // IMPORTANT: Always call resume if we're paused, even if bytes seem wrong
+      // This prevents getting stuck in paused state due to race conditions
+      if (isPausedRef.current && pendingWriteBytesRef.current < LOW_WATERMARK) {
+        isPausedRef.current = false
+        window.electronAPI?.terminal.resume(terminal.id)
+      }
+
+      // Safety: if pendingWriteBytesRef goes negative, reset it
+      // This can happen if there's a mismatch between writes and callbacks
+      if (pendingWriteBytesRef.current < 0) {
+        console.warn('Flow control: pendingWriteBytesRef went negative, resetting')
+        pendingWriteBytesRef.current = 0
+        // If we're paused, resume to unstick
+        if (isPausedRef.current) {
+          isPausedRef.current = false
+          window.electronAPI?.terminal.resume(terminal.id)
+        }
+      }
+
+      scrollToBottomDebounced()
+    })
+  }, [terminal.id, scrollToBottomDebounced])
+
+  // Legacy direct write - for backwards compatibility
+  const writeToTerminal = useCallback((data: string) => {
+    writeToTerminalWithFlowControl(data)
+  }, [writeToTerminalWithFlowControl])
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -153,24 +251,30 @@ function TerminalView({
       }
       
       // Set up ResizeObserver for cached terminal (was disconnected when unmounted)
-      let resizeTimeout: ReturnType<typeof setTimeout>
-      const handleResize = () => {
-        clearTimeout(resizeTimeout)
-        resizeTimeout = setTimeout(() => {
+      let cachedResizeTimeout: ReturnType<typeof setTimeout>
+      const handleCachedResize = () => {
+        clearTimeout(cachedResizeTimeout)
+        cachedResizeTimeout = setTimeout(() => {
           const cachedTerm = terminalCache.get(terminal.id)
-          if (cachedTerm) {
-            cachedTerm.fitAddon.fit()
-            const { cols, rows } = cachedTerm.term
-            window.electronAPI?.terminal.resize(terminal.id, cols, rows)
+          if (cachedTerm && containerRef.current) {
+            // Use min fit guard for cached terminals too
+            if (
+              containerRef.current.offsetWidth >= MIN_FIT_WIDTH &&
+              containerRef.current.offsetHeight >= MIN_FIT_HEIGHT
+            ) {
+              cachedTerm.fitAddon.fit()
+              const { cols, rows } = cachedTerm.term
+              window.electronAPI?.terminal.resize(terminal.id, cols, rows)
+            }
           }
         }, 100)
       }
       
-      const resizeObserver = new ResizeObserver(handleResize)
+      const resizeObserver = new ResizeObserver(handleCachedResize)
       resizeObserver.observe(containerRef.current!)
       
       return () => {
-        clearTimeout(resizeTimeout)
+        clearTimeout(cachedResizeTimeout)
         resizeObserver.disconnect()
         // Just remove the element from DOM, but don't dispose
         const cachedTerm = terminalCache.get(terminal.id)
@@ -251,27 +355,49 @@ function TerminalView({
         imageAddon
       })
 
+      // Replay any buffered output from before terminal.open()
+      replayBuffer()
+
       if (terminal.status === 'idle' && !hasStartedRef.current) {
         hasStartedRef.current = true
         startTerminal(projectId, terminal.id)
       }
     })
 
-    // Debounced resize handler
-    let resizeTimeout: ReturnType<typeof setTimeout>
-    const handleResize = () => {
-      clearTimeout(resizeTimeout)
-      resizeTimeout = setTimeout(() => {
-        if (fitAddonRef.current && terminalRef.current) {
-          fitAddonRef.current.fit()
-          const { cols, rows } = terminalRef.current
-          window.electronAPI?.terminal.resize(terminal.id, cols, rows)
-        }
-      }, 100) // 100ms debounce
+    // Two-tier resize debounce:
+    // - ResizeObserver (100ms) — coalesces rapid layout changes
+    // - onResize (150ms) — avoids SIGWINCH storms
+    const handleResizeObserver = () => {
+      if (resizeObserverTimerRef.current) {
+        clearTimeout(resizeObserverTimerRef.current)
+      }
+      resizeObserverTimerRef.current = setTimeout(() => {
+        requestAnimationFrame(() => {
+          safeFit()
+          // Cancel pending onResize debounce — we're sending dimensions ourselves
+          if (onResizeTimerRef.current) {
+            clearTimeout(onResizeTimerRef.current)
+          }
+          if (terminalRef.current && terminalRef.current.rows > 0 && terminalRef.current.cols > 0) {
+            window.electronAPI?.terminal.resize(terminal.id, terminalRef.current.cols, terminalRef.current.rows)
+          }
+        })
+      }, 100)
     }
 
-    const resizeObserver = new ResizeObserver(handleResize)
-    resizeObserver.observe(containerRef.current)
+    const resizeObserver = new ResizeObserver(handleResizeObserver)
+
+    // Separate debounce for onResize (150ms) — avoids SIGWINCH storms
+    term.onResize(({ rows, cols }) => {
+      if (rows > 0 && cols > 0) {
+        if (onResizeTimerRef.current) {
+          clearTimeout(onResizeTimerRef.current)
+        }
+        onResizeTimerRef.current = setTimeout(() => {
+          window.electronAPI?.terminal.resize(terminal.id, cols, rows)
+        }, 150)
+      }
+    })
 
     term.onKey(({ domEvent }) => {
       const { key, ctrlKey, shiftKey } = domEvent
@@ -316,45 +442,7 @@ function TerminalView({
       isUserAtBottomRef.current = isAtBottom()
     })
 
-    // Custom wheel handler for:
-    // 1. Ctrl+wheel zoom
-    // 2. Scroll in alternate buffer (TUI apps like OpenCode, vim, etc.)
-    // When a TUI app enables mouse mode, scroll events are normally sent to the app.
-    // We intercept them and handle scrolling ourselves when in alternate buffer mode.
-    term.attachCustomWheelEventHandler((event) => {
-      // Ctrl+wheel: zoom
-      if (event.ctrlKey) {
-        const delta = event.deltaY > 0 ? -1 : 1
-        const currentSize = term.options.fontSize || 14
-        const newSize = Math.max(8, Math.min(32, currentSize + delta))
-        term.options.fontSize = newSize
-        // Refit terminal after zoom
-        requestAnimationFrame(() => {
-          fitAddonRef.current?.fit()
-          if (terminalRef.current) {
-            const { cols, rows } = terminalRef.current
-            window.electronAPI?.terminal.resize(terminal.id, cols, rows)
-          }
-        })
-        return false
-      }
-
-      // In alternate buffer mode, handle scrolling ourselves instead of sending to app
-      // This allows scrolling in TUI apps like OpenCode, vim, etc.
-      const buffer = term.buffer.active
-      if (buffer.type === 'alternate') {
-        const scrollAmount = event.deltaY > 0 ? 3 : -3
-        const currentY = buffer.viewportY
-        const newY = Math.max(0, Math.min(buffer.length - term.rows, currentY + scrollAmount))
-
-        if (newY !== currentY) {
-          term.scrollLines(newY - currentY)
-        }
-        return false // Don't send to PTY
-      }
-
-      return true // Let xterm.js handle normally (normal buffer)
-    })
+    // Let xterm.js handle scrolling natively - no custom wheel handler needed
 
     return () => {
       // Clear scroll debounce timer
@@ -363,7 +451,16 @@ function TerminalView({
         scrollDebounceTimerRef.current = null
       }
       
-      clearTimeout(resizeTimeout)
+      // Clear two-tier resize timers
+      if (resizeObserverTimerRef.current) {
+        clearTimeout(resizeObserverTimerRef.current)
+        resizeObserverTimerRef.current = null
+      }
+      if (onResizeTimerRef.current) {
+        clearTimeout(onResizeTimerRef.current)
+        onResizeTimerRef.current = null
+      }
+      
       resizeObserver.disconnect()
       clipboardAddonRef.current = null
       imageAddonRef.current = null
@@ -398,14 +495,20 @@ function TerminalView({
   useEffect(() => {
     const terminalInstance = terminalRef.current
     const fitAddon = fitAddonRef.current
-    if (terminalInstance && fitAddon) {
-      // Use requestAnimationFrame for smoother resize
-      requestAnimationFrame(() => {
-        fitAddon.fit()
-        // Notify PTY of resize - terminalInstance is captured above, safe to use
-        const { cols, rows } = terminalInstance
-        window.electronAPI?.terminal.resize(terminal.id, cols, rows)
-      })
+    if (terminalInstance && fitAddon && containerRef.current) {
+      // Use min fit guard
+      if (
+        containerRef.current.offsetWidth >= MIN_FIT_WIDTH &&
+        containerRef.current.offsetHeight >= MIN_FIT_HEIGHT
+      ) {
+        // Use requestAnimationFrame for smoother resize
+        requestAnimationFrame(() => {
+          fitAddon.fit()
+          // Notify PTY of resize - terminalInstance is captured above, safe to use
+          const { cols, rows } = terminalInstance
+          window.electronAPI?.terminal.resize(terminal.id, cols, rows)
+        })
+      }
     }
   }, [terminal.id, showFileExplorer, explorerWidth, showContextPanel, contextPanelWidth])
   
@@ -569,6 +672,7 @@ function TerminalView({
           width={contextPanelWidth}
           onWidthChange={setContextPanelWidth}
           onClose={() => setShowContextPanel(false)}
+          selectedFile={selectedFile}
         />
       </div>
       

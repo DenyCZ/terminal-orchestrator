@@ -70,8 +70,8 @@ export default function CommandPalette({
 
     // If query is empty, show common commands and recent items
     if (!lowerQuery) {
-      // Show top commands
-      const commands = getAvailableCommands().slice(0, 5);
+      // Show top commands (includes new worktree, excludes new-project)
+      const commands = getAvailableCommands().filter(c => c.command !== 'new-project').slice(0, 6);
       commands.forEach(cmd => {
         items.push({
           id: `cmd-${cmd.command}`,

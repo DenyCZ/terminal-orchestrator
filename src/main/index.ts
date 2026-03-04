@@ -2,9 +2,10 @@ import { app, BrowserWindow, shell, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { setupIpcHandlers } from './ipc'
-import { ConfigStore } from './store'
+import { ConfigStore, clearAllTerminals } from './store'
 import { PtyManager } from './pty'
 import { WebUIManager } from './web-ui-manager'
+import { ensureOpenCodePlugin } from './opencode'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -55,8 +56,13 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // Initialize config store
+  // Initialize config store and clear orphaned terminals
+  // Initialize config store and clear orphaned terminals
   ConfigStore.getInstance()
+  clearAllTerminals()
+
+  // Auto-install OpenCode notification plugin on first run
+  ensureOpenCodePlugin()
 
   // Setup IPC handlers
   setupIpcHandlers()

@@ -3,7 +3,7 @@ import path from 'path';
 import type { Server } from 'http';
 import type { ConfigStore } from '../store';
 import type { PtyManager } from '../pty';
-import type { ServerConfig } from './types';
+import type { ServerConfig, TunnelInfo } from './types';
 import { createRoutes } from './routes';
 import { createAuthMiddleware, corsMiddleware, validTokens } from './middleware';
 
@@ -14,6 +14,7 @@ export class WebServer {
   private store: ConfigStore;
   private ptyManager: PtyManager;
   private auth: ReturnType<typeof createAuthMiddleware>;
+  private tunnelInfo?: TunnelInfo;
   
   constructor(config: ServerConfig, store: ConfigStore, ptyManager: PtyManager) {
     this.config = config;
@@ -43,7 +44,8 @@ export class WebServer {
     this.app.use('/api', this.auth.requireAuth, createRoutes(
       this.config,
       this.store,
-      this.ptyManager
+      this.ptyManager,
+      () => this.tunnelInfo
     ));
     
     // Health check (public)
@@ -138,5 +140,9 @@ export class WebServer {
   
   getValidTokens(): Set<string> {
     return validTokens;
+  }
+  
+  setTunnelInfo(info: TunnelInfo | undefined): void {
+    this.tunnelInfo = info;
   }
 }

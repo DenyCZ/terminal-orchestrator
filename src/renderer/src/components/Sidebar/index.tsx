@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAppStore } from '../../store'
+import { useNotificationStore } from '../../store/notifications'
 import type { Project, ProjectGroup, Terminal } from '@shared/types'
 
 interface SidebarProps {
@@ -17,8 +18,27 @@ interface ContextMenuState {
   terminalStatus: Terminal['status'] | null
 }
 
-// Status indicator component
-function StatusIndicator({ status }: { status: Terminal['status'] }) {
+// Status indicator component - shows blinking yellow when terminal has pending notification
+function StatusIndicator({ status, terminalId }: { status: Terminal['status']; terminalId: string }) {
+  const hasNotification = useNotificationStore((state) => state.hasTerminalNotification(terminalId))
+  const clearTerminalNotification = useNotificationStore((state) => state.clearTerminalNotification)
+  const setActiveTerminal = useAppStore((state) => state.setActiveTerminal)
+  
+  // If terminal has notification, show blinking yellow
+  if (hasNotification) {
+    return (
+      <span 
+        className="w-2 h-2 rounded-full bg-yellow-400 terminal-status-warning cursor-pointer" 
+        title="Click to view notification"
+        onClick={(e) => {
+          e.stopPropagation()
+          clearTerminalNotification(terminalId)
+          setActiveTerminal(terminalId)
+        }}
+      />
+    )
+  }
+  
   const statusConfig = {
     running: { color: 'bg-green-500', blink: false, label: 'Running' },
     idle: { color: 'bg-gray-500', blink: false, label: 'Idle' },
@@ -221,7 +241,7 @@ function TerminalItem({
   if (isEditing) {
     return (
       <div className="flex items-center gap-2 px-3 py-1.5 bg-sidebar-active rounded">
-        <StatusIndicator status={terminal.status} />
+        <StatusIndicator status={terminal.status} terminalId={terminal.id} />
         <input
           ref={inputRef}
           type="text"
@@ -242,7 +262,7 @@ function TerminalItem({
       onClick={onClick}
       onContextMenu={onContextMenu}
     >
-      <StatusIndicator status={terminal.status} />
+      <StatusIndicator status={terminal.status} terminalId={terminal.id} />
       <div className="flex-1 min-w-0">
         <span className={`text-sm truncate block ${showSessionAsMain ? 'text-[#4ec9b0]' : ''}`} title={displayName}>
           {displayName.length > 45 ? displayName.substring(0, 45) + '...' : displayName}
@@ -424,7 +444,11 @@ function ProjectItem({
               terminal={terminal}
               projectId={project.id}
               isActive={terminal.id === activeTerminalId}
-              onClick={() => setActiveTerminal(terminal.id)}
+              onClick={() => {
+                // Clear any pending notifications when user focuses terminal
+                useNotificationStore.getState().clearTerminalNotification(terminal.id)
+                setActiveTerminal(terminal.id)
+              }}
               onContextMenu={(e) => onTerminalContextMenu(e, terminal.id, project.id)}
               isEditing={editingTerminalId === terminal.id}
               onRenameComplete={(newName) => onTerminalRenameComplete(project.id, terminal.id, newName)}

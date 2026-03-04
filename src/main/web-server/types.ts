@@ -6,12 +6,18 @@ export interface ServerConfig {
   allowRemote: boolean;
 }
 
+export interface TunnelInfo {
+  running: boolean;
+  url?: string;
+}
+
 export interface ServerStatus {
   running: boolean;
   port: number;
   addresses: string[];
   url: string;
   qrCode?: string;
+  tunnel?: TunnelInfo;
 }
 
 // Auth types

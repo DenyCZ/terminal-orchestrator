@@ -2,7 +2,7 @@ import { ipcMain, BrowserWindow, shell } from 'electron'
 import { ConfigStore } from '../store'
 import { PtyManager } from '../pty'
 import { IPC_CHANNELS } from '@shared/ipc'
-import type { OpenCodeSessionInfo, OpenCodeWatcherStatus } from '@shared/ipc'
+import type { OpenCodeSessionInfo, OpenCodeWatcherStatus, TunnelStatus } from '@shared/ipc'
 import type { Terminal, Project, ProjectGroup, WebUISettings, AppSettings, DetectedShell, ShellType } from '@shared/types'
 import type { FileEntry, ReadDirOptions } from '@shared/ipc'
 import * as git from '../git'
@@ -175,6 +175,15 @@ export function setupIpcHandlers(): void {
     ptyManager.resize(terminalId, cols, rows)
   })
 
+
+  ipcMain.on(IPC_CHANNELS.TERMINAL_PAUSE, (_, terminalId: string): void => {
+    ptyManager.pause(terminalId)
+  })
+
+  ipcMain.on(IPC_CHANNELS.TERMINAL_RESUME, (_, terminalId: string): void => {
+    ptyManager.resume(terminalId)
+  })
+
   ipcMain.handle(IPC_CHANNELS.CONFIG_LOAD, () => {
     return store.getConfig()
   })
@@ -291,6 +300,13 @@ export function setupIpcHandlers(): void {
     }, [], `FS read dir ${dirPath}`)
   })
 
+
+  ipcMain.handle(IPC_CHANNELS.FS_READ_FILE, async (_, filePath: string): Promise<string> => {
+    return withErrorLogAsync(async () => {
+      return await fs.promises.readFile(filePath, 'utf-8')
+    }, '', `FS read file ${filePath}`)
+  })
+
   const webUIManager = WebUIManager.getInstance()
 
   ipcMain.handle(IPC_CHANNELS.WEBUI_START, async (): Promise<{ success: boolean; error?: string }> => {
@@ -325,6 +341,28 @@ export function setupIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.WEBUI_REGENERATE_PIN, (): { pin: string } => {
     const newPin = webUIManager.regeneratePIN()
     return { pin: newPin }
+  })
+
+  // Tunnel operations
+  ipcMain.handle(IPC_CHANNELS.TUNNEL_START, async (): Promise<{ success: boolean; url?: string; error?: string }> => {
+    try {
+      const url = await webUIManager.startTunnel()
+      return { success: true, url }
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      }
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.TUNNEL_STOP, (): { success: boolean } => {
+    webUIManager.stopTunnel()
+    return { success: true }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.TUNNEL_STATUS, (): TunnelStatus => {
+    return webUIManager.getTunnelStatus()
   })
 
   const openCodeWatcher = getOpenCodeWatcher()

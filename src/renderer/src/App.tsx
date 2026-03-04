@@ -7,6 +7,8 @@ import CommandPalette from './components/CommandPalette'
 import InlinePrompt, { type PromptField } from './components/InlinePrompt'
 import HelpModal from './components/HelpModal'
 import SettingsModal from './components/SettingsModal'
+import { ToastContainer } from './components/Toast'
+import { useNotificationStore } from './store/notifications'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import type { ShellType, DetectedShell, PredefinedTerminal } from '@shared/types'
 
@@ -53,6 +55,22 @@ function App() {
     }
     loadShells()
   }, [])
+
+  // Listen for notifications from main process
+  const addNotification = useNotificationStore((state) => state.addNotification)
+  
+  useEffect(() => {
+    // Safety check - notification API may not be available during hot reload
+    if (!window.electronAPI?.notification?.onShow) {
+      console.warn('[App] Notification API not available - rebuild needed')
+      return
+    }
+    
+    const unsubscribe = window.electronAPI.notification.onShow((notification) => {
+      addNotification(notification)
+    })
+    return unsubscribe
+  }, [addNotification])
 
   useEffect(() => {
     if (isLoading || hasCheckedStartup.current) return
@@ -439,6 +457,9 @@ function App() {
           ?
         </button>
       )}
+
+      {/* Toast notifications */}
+      <ToastContainer />
     </div>
   )
 }
