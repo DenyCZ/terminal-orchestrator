@@ -88,9 +88,8 @@ function TerminalView({
   const outputBufferRef = useRef<string[]>([])
   const outputBufferBytesRef = useRef(0)
   
-  // Two-tier resize debounce refs
+  // Resize debounce ref — coalesces rapid ResizeObserver events before fitting
   const resizeObserverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const onResizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // File explorer state
   const [showFileExplorer, setShowFileExplorer] = useState(false)
   const [explorerWidth, setExplorerWidth] = useState(250)
@@ -242,13 +241,13 @@ function TerminalView({
         
         // Focus the terminal
         cached.term.focus()
+
+        // Start with actual dimensions now that we have them after fit
+        if (terminal.status === 'idle' && !hasStartedRef.current) {
+          hasStartedRef.current = true
+          startTerminal(projectId, terminal.id, cols > 0 ? cols : undefined, rows > 0 ? rows : undefined)
+        }
       })
-      
-      // Check if terminal needs to be started
-      if (terminal.status === 'idle' && !hasStartedRef.current) {
-        hasStartedRef.current = true
-        startTerminal(projectId, terminal.id)
-      }
       
       // Set up ResizeObserver for cached terminal (was disconnected when unmounted)
       let cachedResizeTimeout: ReturnType<typeof setTimeout>
@@ -263,8 +262,7 @@ function TerminalView({
               containerRef.current.offsetHeight >= MIN_FIT_HEIGHT
             ) {
               cachedTerm.fitAddon.fit()
-              const { cols, rows } = cachedTerm.term
-              window.electronAPI?.terminal.resize(terminal.id, cols, rows)
+              // term.onResize fires synchronously and sends the IPC resize
             }
           }
         }, 100)
@@ -360,13 +358,12 @@ function TerminalView({
 
       if (terminal.status === 'idle' && !hasStartedRef.current) {
         hasStartedRef.current = true
-        startTerminal(projectId, terminal.id)
+        // Pass actual xterm dimensions — PTY spawns at the correct size immediately
+        startTerminal(projectId, terminal.id, term.cols > 0 ? term.cols : undefined, term.rows > 0 ? term.rows : undefined)
       }
     })
 
-    // Two-tier resize debounce:
-    // - ResizeObserver (100ms) — coalesces rapid layout changes
-    // - onResize (150ms) — avoids SIGWINCH storms
+    // ResizeObserver debounce (100ms) — coalesces rapid layout changes into a single fit
     const handleResizeObserver = () => {
       if (resizeObserverTimerRef.current) {
         clearTimeout(resizeObserverTimerRef.current)
@@ -374,28 +371,18 @@ function TerminalView({
       resizeObserverTimerRef.current = setTimeout(() => {
         requestAnimationFrame(() => {
           safeFit()
-          // Cancel pending onResize debounce — we're sending dimensions ourselves
-          if (onResizeTimerRef.current) {
-            clearTimeout(onResizeTimerRef.current)
-          }
-          if (terminalRef.current && terminalRef.current.rows > 0 && terminalRef.current.cols > 0) {
-            window.electronAPI?.terminal.resize(terminal.id, terminalRef.current.cols, terminalRef.current.rows)
-          }
+          // term.onResize fires synchronously inside safeFit() and sends the IPC resize
         })
       }, 100)
     }
 
     const resizeObserver = new ResizeObserver(handleResizeObserver)
 
-    // Separate debounce for onResize (150ms) — avoids SIGWINCH storms
+    // Single IPC resize path — fires synchronously when xterm dimensions actually change.
+    // ResizeObserver debounce above prevents SIGWINCH storms; this just delivers the result.
     term.onResize(({ rows, cols }) => {
       if (rows > 0 && cols > 0) {
-        if (onResizeTimerRef.current) {
-          clearTimeout(onResizeTimerRef.current)
-        }
-        onResizeTimerRef.current = setTimeout(() => {
-          window.electronAPI?.terminal.resize(terminal.id, cols, rows)
-        }, 150)
+        window.electronAPI?.terminal.resize(terminal.id, cols, rows)
       }
     })
 
@@ -451,14 +438,10 @@ function TerminalView({
         scrollDebounceTimerRef.current = null
       }
       
-      // Clear two-tier resize timers
+      // Clear resize debounce timer
       if (resizeObserverTimerRef.current) {
         clearTimeout(resizeObserverTimerRef.current)
         resizeObserverTimerRef.current = null
-      }
-      if (onResizeTimerRef.current) {
-        clearTimeout(onResizeTimerRef.current)
-        onResizeTimerRef.current = null
       }
       
       resizeObserver.disconnect()
@@ -491,26 +474,34 @@ function TerminalView({
     }
   }, [terminal.id, writeToTerminal])
 
-  // Handle resize when file explorer visibility/width changes
+  // Correct PTY dimensions whenever the terminal starts running.
+  // Covers initial start (PTY spawned with actual dims) AND restart (re-syncs after kill/respawn).
   useEffect(() => {
-    const terminalInstance = terminalRef.current
+    if (terminal.status !== 'running') return
+    const timer = setTimeout(() => {
+      const term = terminalRef.current
+      if (term && term.cols > 0 && term.rows > 0) {
+        window.electronAPI?.terminal.resize(terminal.id, term.cols, term.rows)
+      }
+    }, 50)
+    return () => clearTimeout(timer)
+  }, [terminal.id, terminal.status])
+
+  // Handle resize when file explorer / context panel visibility or width changes
+  useEffect(() => {
     const fitAddon = fitAddonRef.current
-    if (terminalInstance && fitAddon && containerRef.current) {
-      // Use min fit guard
+    if (fitAddon && containerRef.current) {
       if (
         containerRef.current.offsetWidth >= MIN_FIT_WIDTH &&
         containerRef.current.offsetHeight >= MIN_FIT_HEIGHT
       ) {
-        // Use requestAnimationFrame for smoother resize
         requestAnimationFrame(() => {
           fitAddon.fit()
-          // Notify PTY of resize - terminalInstance is captured above, safe to use
-          const { cols, rows } = terminalInstance
-          window.electronAPI?.terminal.resize(terminal.id, cols, rows)
+          // term.onResize fires synchronously inside fit() and sends the IPC resize
         })
       }
     }
-  }, [terminal.id, showFileExplorer, explorerWidth, showContextPanel, contextPanelWidth])
+  }, [showFileExplorer, explorerWidth, showContextPanel, contextPanelWidth])
   
   // Handle resize drag
   const handleMouseDown = useCallback((e: React.MouseEvent) => {

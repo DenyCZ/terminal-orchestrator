@@ -32,9 +32,9 @@ export interface ElectronAPI {
       updates: Partial<Terminal>
     ) => Promise<Terminal | undefined>
     delete: (projectId: string, terminalId: string) => Promise<boolean>
-    start: (projectId: string, terminalId: string) => Promise<{ pid: number } | undefined>
+    start: (projectId: string, terminalId: string, cols?: number, rows?: number) => Promise<{ pid: number } | undefined>
     stop: (terminalId: string) => Promise<void>
-    restart: (projectId: string, terminalId: string) => Promise<{ pid: number } | undefined>
+    restart: (projectId: string, terminalId: string, cols?: number, rows?: number) => Promise<{ pid: number } | undefined>
     write: (terminalId: string, data: string) => void
     resize: (terminalId: string, cols: number, rows: number) => void
     pause: (terminalId: string) => void

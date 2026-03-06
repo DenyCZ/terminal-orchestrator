@@ -42,7 +42,9 @@ export async function startTerminalProcess(
   ptyManager: PtyManager,
   projectId: string,
   terminalId: string,
-  onOpenCodeDetected?: (terminal: Terminal) => void
+  onOpenCodeDetected?: (terminal: Terminal) => void,
+  cols?: number,
+  rows?: number
 ): Promise<TerminalStartResult> {
   const terminal = store.getTerminal(projectId, terminalId)
   if (!terminal) {
@@ -66,8 +68,8 @@ export async function startTerminalProcess(
       terminalId,
       shellType: terminal.shellType,
       cwd: validCwd,
-      cols: 80,
-      rows: 24
+      cols: cols ?? 80,
+      rows: rows ?? 24
     })
 
     if (terminal.startupCommand) {

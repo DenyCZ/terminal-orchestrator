@@ -121,7 +121,7 @@ export function setupIpcHandlers(): void {
 
   ipcMain.handle(
     IPC_CHANNELS.TERMINAL_START,
-    async (_, projectId: string, terminalId: string): Promise<{ pid: number } | undefined> => {
+    async (_, projectId: string, terminalId: string, cols?: number, rows?: number): Promise<{ pid: number } | undefined> => {
       const result = await startTerminalProcess(
         store, 
         ptyManager, 
@@ -134,7 +134,9 @@ export function setupIpcHandlers(): void {
               store.updateTerminal(projectId, terminalId, { openCodeSessionId: session.id })
             }
           }
-        }
+        },
+        cols,
+        rows
       )
       
       if (!result.success) return undefined
@@ -157,10 +159,10 @@ export function setupIpcHandlers(): void {
 
   ipcMain.handle(
     IPC_CHANNELS.TERMINAL_RESTART,
-    async (_, projectId: string, terminalId: string): Promise<{ pid: number } | undefined> => {
+    async (_, projectId: string, terminalId: string, cols?: number, rows?: number): Promise<{ pid: number } | undefined> => {
       ptyManager.kill(terminalId)
       
-      const result = await startTerminalProcess(store, ptyManager, projectId, terminalId)
+      const result = await startTerminalProcess(store, ptyManager, projectId, terminalId, undefined, cols, rows)
       
       if (!result.success) return undefined
       return { pid: result.pid! }

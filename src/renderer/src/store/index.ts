@@ -45,9 +45,9 @@ interface AppState {
   ) => Promise<Terminal | undefined>
   updateTerminal: (projectId: string, terminalId: string, updates: Partial<Terminal>) => Promise<void>
   deleteTerminal: (projectId: string, terminalId: string) => Promise<void>
-  startTerminal: (projectId: string, terminalId: string) => Promise<void>
+  startTerminal: (projectId: string, terminalId: string, cols?: number, rows?: number) => Promise<void>
   stopTerminal: (terminalId: string) => Promise<void>
-  restartTerminal: (projectId: string, terminalId: string) => Promise<void>
+  restartTerminal: (projectId: string, terminalId: string, cols?: number, rows?: number) => Promise<void>
   setActiveTerminal: (id: string | null) => void
   updateTerminalStatus: (projectId: string, terminalId: string, status: Terminal['status']) => void
   
@@ -299,8 +299,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     })
   },
   
-  startTerminal: async (projectId: string, terminalId: string) => {
-    const result = await window.electronAPI.terminal.start(projectId, terminalId)
+  startTerminal: async (projectId: string, terminalId: string, cols?: number, rows?: number) => {
+    const result = await window.electronAPI.terminal.start(projectId, terminalId, cols, rows)
     if (result) get().updateTerminalStatus(projectId, terminalId, 'running')
   },
   
@@ -316,8 +316,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
   
-  restartTerminal: async (projectId: string, terminalId: string) => {
-    const result = await window.electronAPI.terminal.restart(projectId, terminalId)
+  restartTerminal: async (projectId: string, terminalId: string, cols?: number, rows?: number) => {
+    const result = await window.electronAPI.terminal.restart(projectId, terminalId, cols, rows)
     if (result) get().updateTerminalStatus(projectId, terminalId, 'running')
   },
   

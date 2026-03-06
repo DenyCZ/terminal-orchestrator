@@ -59,14 +59,14 @@ const electronAPI = {
     delete: (projectId: string, terminalId: string): Promise<boolean> =>
       ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_DELETE, projectId, terminalId),
 
-    start: (projectId: string, terminalId: string): Promise<{ pid: number } | undefined> =>
-      ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_START, projectId, terminalId),
+    start: (projectId: string, terminalId: string, cols?: number, rows?: number): Promise<{ pid: number } | undefined> =>
+      ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_START, projectId, terminalId, cols, rows),
 
     stop: (terminalId: string): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_STOP, terminalId),
 
-    restart: (projectId: string, terminalId: string): Promise<{ pid: number } | undefined> =>
-      ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_RESTART, projectId, terminalId),
+    restart: (projectId: string, terminalId: string, cols?: number, rows?: number): Promise<{ pid: number } | undefined> =>
+      ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_RESTART, projectId, terminalId, cols, rows),
 
     write: (terminalId: string, data: string): void =>
       ipcRenderer.send(IPC_CHANNELS.TERMINAL_WRITE, terminalId, data),

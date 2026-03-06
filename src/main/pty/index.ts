@@ -8,6 +8,7 @@ import type { ShellType, TerminalStatus } from '@shared/types'
 import type { PtyConfig, AppNotification } from '@shared/ipc'
 import { IPC_CHANNELS } from '@shared/ipc'
 import { detectShells } from '../shell-detector'
+import { EscapeAwareBuffer } from './utf8-buffer'
 
 // OSC 777 notification pattern: ESC ] 777 ; notify ; Title ; Body BEL
 // Format: \x1b]777;notify;Title;Body\x07
@@ -36,6 +37,7 @@ interface PtySession {
   pid: number
   paused: boolean  // Flow control flag
   pausedBuffer: string[]  // Buffer for data received while paused
+  escapeBuffer: EscapeAwareBuffer  // Prevents split ANSI sequences across IPC chunks
 }
 
 // Data sender - sends terminal data immediately to avoid splitting escape sequences
@@ -397,7 +399,8 @@ export class PtyManager {
       pty: ptyProcess,
       pid: ptyProcess.pid,
       paused: false,  // Initialize as not paused
-      pausedBuffer: []  // Buffer for data received while paused
+      pausedBuffer: [],  // Buffer for data received while paused
+      escapeBuffer: new EscapeAwareBuffer()  // Per-session buffer to prevent split escape sequences
     }
 
     // Setup data handling - buffer data when paused, send when not
@@ -423,14 +426,19 @@ export class PtyManager {
         return
       }
       
+      // Run through escape-aware buffer — prevents split ANSI sequences across IPC chunk boundaries
+      // (e.g. ESC [ arriving in chunk N, 31m in chunk N+1 → TUI distortion if sent separately)
+      const safeData = session.escapeBuffer.push(data)
+      if (!safeData) return  // holding an incomplete escape sequence — wait for next chunk
+
       // Detect OSC 777 notifications before sending to terminal
-      this.detectAndEmitNotifications(data, config.terminalId)
+      this.detectAndEmitNotifications(safeData, config.terminalId)
       
       // Track bytes for metrics
-      this.metrics.bytesEmitted += data.length
+      this.metrics.bytesEmitted += safeData.length
       
       // Strip OSC 777 sequences from data before sending to terminal
-      const cleanData = data.replace(OSC_777_NOTIFY_REGEX, '')
+      const cleanData = safeData.replace(OSC_777_NOTIFY_REGEX, '')
       
       this.dataSender.sendData(config.terminalId, cleanData)
       // Also broadcast to WebSocket clients
@@ -549,14 +557,22 @@ export class PtyManager {
       
       // Flush buffered data if any (buffer could have data even if wasPaused is false due to race conditions)
       if (session.pausedBuffer.length > 0) {
-        const bufferedData = session.pausedBuffer.join('')
+        const rawBuffered = session.pausedBuffer.join('')
         session.pausedBuffer = []
         
-        // Track bytes for metrics
-        this.metrics.bytesEmitted += bufferedData.length
-        
-        this.dataSender.sendData(terminalId, bufferedData)
-        this.wsServer?.broadcastToTerminal(terminalId, bufferedData)
+        // Run through escape buffer — merges any held remainder from before the pause
+        // so sequence boundaries are respected across the pause/resume transition
+        const safeBuffered = session.escapeBuffer.push(rawBuffered)
+        if (safeBuffered) {
+          // Track bytes for metrics
+          this.metrics.bytesEmitted += safeBuffered.length
+
+          // Strip OSC 777 sequences
+          const cleanBuffered = safeBuffered.replace(OSC_777_NOTIFY_REGEX, '')
+
+          this.dataSender.sendData(terminalId, cleanBuffered)
+          this.wsServer?.broadcastToTerminal(terminalId, cleanBuffered)
+        }
       }
     }
   }
