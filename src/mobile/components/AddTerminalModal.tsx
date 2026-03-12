@@ -7,9 +7,10 @@ interface AddTerminalModalProps {
   onClose: () => void
   onAdd: (name: string, shellType: ShellType, workingDirectory: string, startupCommand?: string) => Promise<void>
   projectRootDirectory?: string
+  prefilledName?: string
 }
 
-export function AddTerminalModal({ isOpen, onClose, onAdd, projectRootDirectory }: AddTerminalModalProps) {
+export function AddTerminalModal({ isOpen, onClose, onAdd, projectRootDirectory, prefilledName }: AddTerminalModalProps) {
   const [name, setName] = useState('')
   const [shellType, setShellType] = useState<ShellType>('powershell')
   const [workingDirectory, setWorkingDirectory] = useState(projectRootDirectory || '')
@@ -23,8 +24,12 @@ export function AddTerminalModal({ isOpen, onClose, onAdd, projectRootDirectory 
   useEffect(() => {
     if (isOpen) {
       loadShells()
+      // Prefill name if provided
+      if (prefilledName) {
+        setName(prefilledName)
+      }
     }
-  }, [isOpen])
+  }, [isOpen, prefilledName])
   
   const loadShells = async () => {
     try {

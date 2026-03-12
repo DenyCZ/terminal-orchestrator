@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useAppStore } from '../../store';
-import { SHORTCUT_DEFINITIONS, DEFAULT_SHORTCUTS, DEFAULT_SETTINGS, type KeyBinding, type ShortcutId, type DetectedShell, type ShellType } from '@shared/types';
+import { SHORTCUT_DEFINITIONS, DEFAULT_SHORTCUTS, DEFAULT_SETTINGS, type KeyBinding, type ShortcutId, type DetectedShell, type ShellType, type TunnelMode, type WebUISettings } from '@shared/types';
 import type { WebUIStatus } from '@shared/ipc';
 
 interface SettingsModalProps {
@@ -59,48 +59,138 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   };
   
   // Load Web UI status
+  const loadWebUIStatus = useCallback(async () => {
+    try {
+      const [status, tunnelStatus] = await Promise.all([
+        window.electronAPI.webui.getStatus(),
+        window.electronAPI.tunnel.getStatus()
+      ]);
+
+      setWebUIStatus({
+        ...status,
+        url: tunnelStatus.url || status.url,
+        tunnel: tunnelStatus
+      });
+    } catch (error) {
+      console.error('Failed to load Web UI status:', error);
+    }
+  }, []);
+
   useEffect(() => {
     if (isOpen && activeTab === 'webui') {
       loadWebUIStatus();
     }
-  }, [isOpen, activeTab]);
-  
-  const loadWebUIStatus = async () => {
-    try {
-      const status = await window.electronAPI.webui.getStatus();
-      setWebUIStatus(status);
-    } catch (error) {
-      console.error('Failed to load Web UI status:', error);
+  }, [isOpen, activeTab, loadWebUIStatus]);
+
+  useEffect(() => {
+    if (!isOpen || activeTab !== 'webui' || !settings.webUI?.enabled) {
+      return;
     }
+
+    const intervalId = window.setInterval(() => {
+      void loadWebUIStatus();
+    }, 2000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [isOpen, activeTab, settings.webUI?.enabled, loadWebUIStatus]);
+
+  const updateWebUISettings = (webUI: WebUISettings) => {
+    updateSettings({ webUI });
   };
   
   const handleWebUIToggle = async (enabled: boolean) => {
-    updateSettings({ webUI: { ...DEFAULT_SETTINGS.webUI!, ...settings.webUI, enabled } });
+    updateWebUISettings({ ...DEFAULT_SETTINGS.webUI!, ...settings.webUI, enabled });
     if (enabled) {
       await window.electronAPI.webui.start();
     } else {
       await window.electronAPI.webui.stop();
     }
-    loadWebUIStatus();
+    await loadWebUIStatus();
   };
-  
+
   const handlePortChange = (port: number) => {
-    updateSettings({ webUI: { ...DEFAULT_SETTINGS.webUI!, ...settings.webUI, port } });
+    updateWebUISettings({ ...DEFAULT_SETTINGS.webUI!, ...settings.webUI, port });
   };
-  
+
   const handleAllowRemoteChange = async (allowRemote: boolean) => {
-    updateSettings({ webUI: { ...DEFAULT_SETTINGS.webUI!, ...settings.webUI, allowRemote } });
+    updateWebUISettings({ ...DEFAULT_SETTINGS.webUI!, ...settings.webUI, allowRemote });
     if (webUIStatus?.running) {
       await window.electronAPI.webui.stop();
       await window.electronAPI.webui.start();
-      loadWebUIStatus();
+      await loadWebUIStatus();
     }
   };
-  
+
   const handleRegeneratePIN = async () => {
     const result = await window.electronAPI.webui.regeneratePin();
-    loadWebUIStatus();
+    await loadWebUIStatus();
     return result.pin;
+  };
+
+  const handleTunnelToggle = async (enabled: boolean) => {
+    const nextWebUI = {
+      ...DEFAULT_SETTINGS.webUI!,
+      ...settings.webUI,
+      tunnel: {
+        ...DEFAULT_SETTINGS.webUI!.tunnel!,
+        ...settings.webUI?.tunnel,
+        enabled
+      }
+    };
+
+    updateWebUISettings(nextWebUI);
+
+    if (enabled) {
+      if (settings.webUI?.enabled) {
+        await window.electronAPI.tunnel.start();
+      }
+    } else {
+      await window.electronAPI.tunnel.stop();
+    }
+
+    await loadWebUIStatus();
+  };
+
+  const handleTunnelModeChange = async (mode: TunnelMode) => {
+    const nextWebUI = {
+      ...DEFAULT_SETTINGS.webUI!,
+      ...settings.webUI,
+      tunnel: {
+        ...DEFAULT_SETTINGS.webUI!.tunnel!,
+        ...settings.webUI?.tunnel,
+        mode
+      }
+    };
+
+    updateWebUISettings(nextWebUI);
+
+    if (settings.webUI?.enabled && nextWebUI.tunnel?.enabled) {
+      await window.electronAPI.tunnel.stop();
+      await window.electronAPI.tunnel.start();
+      await loadWebUIStatus();
+    }
+  };
+
+  const handleTunnelFieldChange = async (field: 'tunnelId' | 'hostname' | 'credentialsFile', value: string) => {
+    const nextWebUI = {
+      ...DEFAULT_SETTINGS.webUI!,
+      ...settings.webUI,
+      tunnel: {
+        ...DEFAULT_SETTINGS.webUI!.tunnel!,
+        ...settings.webUI?.tunnel,
+        [field]: value
+      }
+    };
+
+    updateWebUISettings(nextWebUI);
+
+    if (settings.webUI?.enabled && nextWebUI.tunnel?.enabled && nextWebUI.tunnel.mode === 'named') {
+      await window.electronAPI.tunnel.stop();
+      await window.electronAPI.tunnel.start();
+      await loadWebUIStatus();
+    }
   };
   
   const handleCopyURL = () => {
@@ -496,14 +586,85 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         Allow connections from any network (not just localhost)
                       </span>
                     </div>
+
+                    <div className="settings-item">
+                      <span className="settings-item-label">Enable Cloudflare Tunnel</span>
+                      <label className="settings-toggle">
+                        <input
+                          type="checkbox"
+                          checked={settings.webUI?.tunnel?.enabled || false}
+                          onChange={(e) => handleTunnelToggle(e.target.checked)}
+                        />
+                        <span className="settings-toggle-slider"></span>
+                      </label>
+                      <span className="settings-item-hint">
+                        Expose the Web UI through Cloudflare Tunnel while the desktop app is running
+                      </span>
+                    </div>
+
+                    {settings.webUI?.tunnel?.enabled && (
+                      <>
+                        <div className="settings-item">
+                          <span className="settings-item-label">Tunnel Type</span>
+                          <select
+                            className="settings-input"
+                            value={settings.webUI?.tunnel?.mode || 'quick'}
+                            onChange={(e) => handleTunnelModeChange(e.target.value as TunnelMode)}
+                          >
+                            <option value="quick">Quick Tunnel</option>
+                            <option value="named">Named Tunnel (Permanent)</option>
+                          </select>
+                        </div>
+
+                        {settings.webUI?.tunnel?.mode === 'named' && (
+                          <>
+                            <div className="settings-item">
+                              <span className="settings-item-label">Tunnel ID</span>
+                              <input
+                                type="text"
+                                className="settings-input"
+                                value={settings.webUI?.tunnel?.tunnelId || ''}
+                                onChange={(e) => handleTunnelFieldChange('tunnelId', e.target.value)}
+                                placeholder="UUID from Cloudflare Tunnel"
+                              />
+                            </div>
+
+                            <div className="settings-item">
+                              <span className="settings-item-label">Public Hostname</span>
+                              <input
+                                type="text"
+                                className="settings-input"
+                                value={settings.webUI?.tunnel?.hostname || ''}
+                                onChange={(e) => handleTunnelFieldChange('hostname', e.target.value)}
+                                placeholder="terminal.example.com"
+                              />
+                            </div>
+
+                            <div className="settings-item">
+                              <span className="settings-item-label">Credentials File</span>
+                              <input
+                                type="text"
+                                className="settings-input"
+                                value={settings.webUI?.tunnel?.credentialsFile || ''}
+                                onChange={(e) => handleTunnelFieldChange('credentialsFile', e.target.value)}
+                                placeholder="C:\\Users\\you\\.cloudflared\\<tunnel-id>.json"
+                              />
+                              <span className="settings-item-hint">
+                                Create the named tunnel and DNS route outside the app, then paste the credentials file path here
+                              </span>
+                            </div>
+                          </>
+                        )}
+                      </>
+                    )}
                   </div>
                   
-                  {webUIStatus?.running && (
+                  {webUIStatus && (
                     <div className="settings-group settings-connection-info">
                       <h3 className="settings-group-title">Connection Info</h3>
                       
                       <div className="settings-item">
-                        <span className="settings-item-label">Mobile URL</span>
+                        <span className="settings-item-label">Primary URL</span>
                         <div className="settings-url-display">
                           <code>{webUIStatus.url}</code>
                           <button 
@@ -514,7 +675,41 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                           </button>
                         </div>
                       </div>
-                      
+
+                      {settings.webUI?.tunnel?.enabled && (
+                        <div className="settings-item">
+                          <span className="settings-item-label">Tunnel URL</span>
+                          <div className="settings-url-display">
+                            <code>{webUIStatus.tunnel?.url || webUIStatus.tunnel?.error || 'Waiting for tunnel URL...'}</code>
+                            <button
+                              className="settings-btn-secondary"
+                              onClick={() => navigator.clipboard.writeText(webUIStatus.tunnel?.url || '')}
+                              disabled={!webUIStatus.tunnel?.url}
+                            >
+                              Copy
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {webUIStatus.localUrl && webUIStatus.localUrl !== webUIStatus.url && (
+                        <div className="settings-item">
+                          <span className="settings-item-label">Local URL</span>
+                          <div className="settings-url-display">
+                            <code>{webUIStatus.localUrl}</code>
+                          </div>
+                        </div>
+                      )}
+
+                      {webUIStatus.tunnel && (
+                        <div className="settings-item">
+                          <span className="settings-item-label">Tunnel Status</span>
+                          <span className={`settings-status-badge ${webUIStatus.tunnel.running ? 'running' : 'stopped'}`}>
+                            {webUIStatus.tunnel.running ? 'Running' : webUIStatus.tunnel.error || 'Stopped'}
+                          </span>
+                        </div>
+                      )}
+                       
                       {settings.webUI?.showQRCode && webUIStatus.qrCode && (
                         <div className="settings-item">
                           <span className="settings-item-label">QR Code</span>

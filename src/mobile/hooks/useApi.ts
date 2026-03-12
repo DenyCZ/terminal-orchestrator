@@ -1,14 +1,12 @@
 import { useCallback } from 'react'
 
-const getServerUrl = () => localStorage.getItem('serverUrl') || ''
 const getToken = () => localStorage.getItem('authToken') || ''
 
 export function useApi() {
   const request = useCallback(async (endpoint: string, options: RequestInit = {}) => {
-    const serverUrl = getServerUrl()
     const token = getToken()
     
-    const response = await fetch(`${serverUrl}/api${endpoint}`, {
+    const response = await fetch(`${window.location.origin}/api${endpoint}`, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
@@ -30,8 +28,8 @@ export function useApi() {
     return response.json()
   }, [])
   
-  const authenticate = useCallback(async (serverUrl: string, pin: string) => {
-    const response = await fetch(`${serverUrl}/api/auth`, {
+  const authenticate = useCallback(async (pin: string) => {
+    const response = await fetch(`${window.location.origin}/api/auth`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ pin }),

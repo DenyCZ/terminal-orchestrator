@@ -7,17 +7,16 @@ export function useWebSocket(isAuthenticated: boolean) {
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   
   const connect = useCallback(() => {
-    const serverUrl = localStorage.getItem('serverUrl')
     const token = localStorage.getItem('authToken')
     
-    if (!serverUrl || !token || !isAuthenticated) return
+    if (!token || !isAuthenticated) return
     
     // Close existing connection
     if (wsRef.current) {
       wsRef.current.close()
     }
     
-    const wsUrl = serverUrl.replace('http', 'ws') + `/ws/terminal?token=${token}`
+    const wsUrl = window.location.origin.replace('http', 'ws') + `/ws/terminal?token=${token}`
     
     try {
       const ws = new WebSocket(wsUrl)

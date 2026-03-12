@@ -4,8 +4,9 @@ import { WebSocketTerminalServer } from './ws-server';
 import { ConfigStore } from './store';
 import { PtyManager } from './pty';
 import { CloudflareTunnel } from './tunnel';
-import type { WebUISettings, TerminalStatus, TunnelSettings } from '@shared/types';
+import type { WebUISettings, TerminalStatus, TunnelSettings } from '../shared/types';
 import type { ITerminalDataBroadcaster } from './pty';
+import type { WebUIStatus } from '../shared/ipc';
 
 export class WebUIManager implements ITerminalDataBroadcaster {
   private static instance: WebUIManager;
@@ -162,8 +163,9 @@ export class WebUIManager implements ITerminalDataBroadcaster {
     
     this.tunnel = new CloudflareTunnel();
     
-    const port = this.webServer.getPort();
-    const url = await this.tunnel.start(port);
+      const port = this.webServer.getPort();
+      const settings = this.store.getSettings().webUI;
+      const url = await this.tunnel.start(port, settings?.tunnel);
     
     // Update web server with tunnel info
     this.webServer.setTunnelInfo({ running: true, url });
@@ -190,5 +192,47 @@ export class WebUIManager implements ITerminalDataBroadcaster {
   
   isTunnelRunning(): boolean {
     return this.tunnel?.isRunning() ?? false;
+  }
+
+  async getStatus(): Promise<WebUIStatus> {
+    const settings = this.store.getSettings().webUI;
+
+    if (!settings) {
+      return {
+        running: false,
+        port: 3000,
+        pin: '',
+        addresses: []
+      };
+    }
+
+    if (!this.webServer?.isRunning()) {
+      const localUrl = `http://localhost:${settings.port}`;
+      return {
+        running: false,
+        port: settings.port,
+        pin: settings.pin || '',
+        url: settings.tunnel?.mode === 'named' && settings.tunnel.hostname
+          ? `https://${settings.tunnel.hostname}`
+          : localUrl,
+        localUrl,
+        addresses: [],
+        tunnel: this.getTunnelStatus()
+      };
+    }
+
+    const serverStatus = await this.webServer.getStatus();
+    const tunnelStatus = this.getTunnelStatus();
+
+    return {
+      running: serverStatus.running,
+      port: serverStatus.port,
+      pin: settings.pin || '',
+      url: tunnelStatus.url || serverStatus.url,
+      localUrl: serverStatus.url,
+      addresses: serverStatus.addresses,
+      qrCode: serverStatus.qrCode,
+      tunnel: tunnelStatus
+    };
   }
 }

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { ConfigStore } from '../store';
 import type { PtyManager } from '../pty';
 import type { ServerConfig, TunnelInfo } from './types';
-import * as qrcode from 'qrcode';
+import qrcode from 'qrcode';
 import { detectShells } from '../shell-detector';
 import { startTerminalProcess } from '../terminal-helpers';
 

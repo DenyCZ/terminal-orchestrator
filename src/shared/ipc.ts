@@ -141,8 +141,10 @@ export interface WebUIStatus {
   port: number;
   pin: string;
   url?: string;
+  localUrl?: string;
   addresses: string[];
   qrCode?: string;
+  tunnel?: TunnelStatus;
 }
 
 // Tunnel status
@@ -204,4 +206,3 @@ export interface AppNotification {
   timestamp: number;
   duration?: number; // ms, 0 = persistent
 }
-

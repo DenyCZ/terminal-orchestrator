@@ -282,6 +282,63 @@
   color: #666;
 }
 
+/* Project Group (expandable) */
+.project-group {
+  border-bottom: 1px solid #2d2d2d;
+}
+
+.project-expand-icon {
+  font-size: 12px;
+  color: #666;
+  margin-left: 8px;
+}
+
+.project-terminals-list {
+  background: #1a1a1a;
+  padding: 8px 0;
+}
+
+.terminal-item-inline {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px 12px 44px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.terminal-item-inline:active {
+  background: #2d2d2d;
+}
+
+.empty-terminals {
+  padding: 16px 16px 16px 44px;
+  color: #666;
+  font-size: 14px;
+}
+
+.empty-terminals p {
+  margin-bottom: 8px;
+}
+
+.add-terminal-inline {
+  display: block;
+  width: calc(100% - 44px);
+  margin: 8px 16px 8px 44px;
+  padding: 10px 16px;
+  background: transparent;
+  color: #4ec9b0;
+  border: 1px dashed #4ec9b0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.add-terminal-inline:active {
+  background: rgba(78, 201, 176, 0.1);
+}
+
 /* Terminal List */
 .terminal-list {
   flex: 1;

@@ -957,6 +957,7 @@ html, body, #root {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
   padding: 10px 12px;
   background: #1e1e1e;
   border-radius: 6px;
@@ -965,6 +966,7 @@ html, body, #root {
 .settings-item-label {
   font-size: 13px;
   color: #d4d4d4;
+  flex: 0 0 180px;
 }
 
 .settings-select {
@@ -1055,7 +1057,8 @@ html, body, #root {
   border-radius: 4px;
   color: #d4d4d4;
   font-size: 13px;
-  width: 100px;
+  width: min(420px, 100%);
+  min-width: 220px;
   outline: none;
 }
 
@@ -1068,6 +1071,10 @@ html, body, #root {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex: 1;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .settings-pin-display code,
@@ -1084,6 +1091,19 @@ html, body, #root {
 .settings-url-display code {
   letter-spacing: 0;
   color: #d4d4d4;
+  min-width: 320px;
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.settings-item > .settings-input,
+.settings-item > .settings-select,
+.settings-item > .settings-toggle,
+.settings-item > .settings-pin-display,
+.settings-item > .settings-url-display,
+.settings-item > .settings-status-badge,
+.settings-item > .settings-qr-code {
+  margin-left: auto;
 }
 
 .settings-btn-secondary {

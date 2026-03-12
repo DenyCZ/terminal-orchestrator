@@ -1,10 +1,10 @@
 import { ipcMain, BrowserWindow, shell } from 'electron'
 import { ConfigStore } from '../store'
 import { PtyManager } from '../pty'
-import { IPC_CHANNELS } from '@shared/ipc'
-import type { OpenCodeSessionInfo, OpenCodeWatcherStatus, TunnelStatus } from '@shared/ipc'
-import type { Terminal, Project, ProjectGroup, WebUISettings, AppSettings, DetectedShell, ShellType } from '@shared/types'
-import type { FileEntry, ReadDirOptions } from '@shared/ipc'
+import { IPC_CHANNELS } from '../../shared/ipc'
+import type { OpenCodeSessionInfo, OpenCodeWatcherStatus, TunnelStatus, WebUIStatus } from '../../shared/ipc'
+import type { Terminal, Project, ProjectGroup, WebUISettings, AppSettings, DetectedShell, ShellType } from '../../shared/types'
+import type { FileEntry, ReadDirOptions } from '../../shared/ipc'
 import * as git from '../git'
 import { WebUIManager } from '../web-ui-manager'
 import { detectShells } from '../shell-detector'
@@ -329,15 +329,8 @@ export function setupIpcHandlers(): void {
     return { success: true }
   })
 
-  ipcMain.handle(IPC_CHANNELS.WEBUI_STATUS, (): WebUIStatus => {
-    const settings = store.getSettings().webUI as WebUISettings | undefined
-    return {
-      running: webUIManager.isRunning(),
-      port: settings?.port || 3000,
-      pin: settings?.pin || '',
-      addresses: [],
-      url: settings?.enabled ? `http://localhost:${settings?.port || 3000}` : undefined
-    }
+  ipcMain.handle(IPC_CHANNELS.WEBUI_STATUS, async (): Promise<WebUIStatus> => {
+    return webUIManager.getStatus()
   })
 
   ipcMain.handle(IPC_CHANNELS.WEBUI_REGENERATE_PIN, (): { pin: string } => {

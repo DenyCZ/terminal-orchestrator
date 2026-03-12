@@ -1,4 +1,5 @@
 import express, { type Express, type Request, Response } from 'express';
+import * as os from 'os';
 import path from 'path';
 import type { Server } from 'http';
 import type { ConfigStore } from '../store';
@@ -6,6 +7,22 @@ import type { PtyManager } from '../pty';
 import type { ServerConfig, TunnelInfo } from './types';
 import { createRoutes } from './routes';
 import { createAuthMiddleware, corsMiddleware, validTokens } from './middleware';
+import qrcode from 'qrcode';
+
+function getLocalAddresses(): string[] {
+  const addresses: string[] = [];
+  const interfaces = os.networkInterfaces();
+
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name] ?? []) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        addresses.push(iface.address);
+      }
+    }
+  }
+
+  return addresses;
+}
 
 export class WebServer {
   private app: Express;
@@ -144,5 +161,30 @@ export class WebServer {
   
   setTunnelInfo(info: TunnelInfo | undefined): void {
     this.tunnelInfo = info;
+  }
+
+  async getStatus(): Promise<{ running: boolean; port: number; addresses: string[]; url: string; qrCode?: string; tunnel?: TunnelInfo }> {
+    const addresses = getLocalAddresses();
+    const url = addresses.length > 0
+      ? `http://${addresses[0]}:${this.config.port}`
+      : `http://localhost:${this.config.port}`;
+
+    let qrCode: string | undefined;
+    if (this.config.allowRemote && addresses.length > 0) {
+      try {
+        qrCode = await qrcode.toDataURL(url);
+      } catch (error) {
+        console.warn('Failed to generate QR code:', error);
+      }
+    }
+
+    return {
+      running: this.isRunning(),
+      port: this.config.port,
+      addresses,
+      url,
+      qrCode,
+      tunnel: this.tunnelInfo
+    };
   }
 }

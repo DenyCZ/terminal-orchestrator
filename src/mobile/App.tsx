@@ -1,18 +1,20 @@
 import { useState, useEffect, useCallback } from 'react'
 import { LoginScreen } from './components/LoginScreen'
 import { ProjectList } from './components/ProjectList'
-import { TerminalList } from './components/TerminalList'
+import { AddTerminalModal } from './components/AddTerminalModal'
 import { TerminalView } from './components/TerminalView'
 import { ConnectionStatus } from './components/ConnectionStatus'
 import { useApi } from './hooks/useApi'
 import { useWebSocket } from './hooks/useWebSocket'
-import type { Project, Terminal } from '@shared/types'
+import type { Project, Terminal, ShellType } from '@shared/types'
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [activeProject, setActiveProject] = useState<Project | null>(null)
   const [activeTerminal, setActiveTerminal] = useState<Terminal | null>(null)
   const [projects, setProjects] = useState<Project[]>([])
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [projectForNewTerminal, setProjectForNewTerminal] = useState<Project | null>(null)
   
   const api = useApi()
   const ws = useWebSocket(isAuthenticated)
@@ -36,30 +38,47 @@ function App() {
     setIsAuthenticated(true)
   }
   
-  const handleProjectSelect = (project: Project) => {
+  const handleTerminalSelect = (project: Project, terminal: Terminal) => {
     setActiveProject(project)
-    if (project.terminals.length > 0) {
-      setActiveTerminal(project.terminals[0])
-    } else {
-      setActiveTerminal(null)
+    setActiveTerminal(terminal)
+  }
+  
+  const handleAddTerminal = (project: Project) => {
+    setProjectForNewTerminal(project)
+    setShowAddModal(true)
+  }
+  
+  const handleCreateTerminal = async (
+    name: string,
+    shellType: ShellType,
+    workingDirectory: string,
+    startupCommand?: string
+  ) => {
+    if (!projectForNewTerminal) return
+    try {
+      await api.createTerminal(projectForNewTerminal.id, name, shellType, workingDirectory, startupCommand)
+      loadProjects()
+    } catch (error) {
+      console.error('Failed to create terminal:', error)
+      throw error
     }
   }
   
-  const handleTerminalSelect = (terminal: Terminal) => {
-    setActiveTerminal(terminal)
+  const getPrefilledTerminalName = () => {
+    if (!projectForNewTerminal) return 'Terminal 1'
+    const count = projectForNewTerminal.terminals.length + 1
+    return `Terminal ${count}`
   }
   
   const handleBack = () => {
     if (activeTerminal) {
       setActiveTerminal(null)
-    } else if (activeProject) {
       setActiveProject(null)
     }
   }
   
   const handleLogout = () => {
     localStorage.removeItem('authToken')
-    localStorage.removeItem('serverUrl')
     setIsAuthenticated(false)
     setActiveProject(null)
     setActiveTerminal(null)
@@ -69,8 +88,7 @@ function App() {
   // Check for existing auth on mount
   useEffect(() => {
     const token = localStorage.getItem('authToken')
-    const serverUrl = localStorage.getItem('serverUrl')
-    if (token && serverUrl) {
+    if (token) {
       setIsAuthenticated(true)
     }
   }, [])
@@ -83,29 +101,33 @@ function App() {
     <div className="mobile-app">
       <ConnectionStatus connected={ws.connected} onLogout={handleLogout} />
       
-      {!activeProject ? (
+      {!activeTerminal ? (
         <ProjectList 
           projects={projects}
-          onSelect={handleProjectSelect}
+          onSelectTerminal={handleTerminalSelect}
           onRefresh={loadProjects}
-        />
-      ) : !activeTerminal ? (
-        <TerminalList
-          project={activeProject}
-          onSelect={handleTerminalSelect}
-          onBack={handleBack}
-          onTerminalCreated={loadProjects}
-          api={api}
+          onAddTerminal={handleAddTerminal}
         />
       ) : (
         <TerminalView
           terminal={activeTerminal}
-          project={activeProject}
+          project={activeProject!}
           ws={ws}
           api={api}
           onBack={handleBack}
         />
       )}
+      
+      <AddTerminalModal
+        isOpen={showAddModal}
+        onClose={() => {
+          setShowAddModal(false)
+          setProjectForNewTerminal(null)
+        }}
+        onAdd={handleCreateTerminal}
+        projectRootDirectory={projectForNewTerminal?.rootDirectory}
+        prefilledName={getPrefilledTerminalName()}
+      />
     </div>
   )
 }

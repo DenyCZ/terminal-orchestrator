@@ -3,12 +3,11 @@ import { useState } from 'react'
 interface LoginScreenProps {
   onLogin: () => void
   api: {
-    authenticate: (serverUrl: string, pin: string) => Promise<{ token: string; expiresAt: number }>
+    authenticate: (pin: string) => Promise<{ token: string; expiresAt: number }>
   }
 }
 
 export function LoginScreen({ onLogin, api }: LoginScreenProps) {
-  const [serverUrl, setServerUrl] = useState('')
   const [pin, setPin] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -19,20 +18,12 @@ export function LoginScreen({ onLogin, api }: LoginScreenProps) {
     setError('')
     
     try {
-      // Normalize URL (remove trailing slash)
-      const normalizedUrl = serverUrl.replace(/\/+$/, '')
-      
-      // Store server URL
-      localStorage.setItem('serverUrl', normalizedUrl)
-      
-      // Authenticate
-      const result = await api.authenticate(normalizedUrl, pin)
+      const result = await api.authenticate(pin)
       localStorage.setItem('authToken', result.token)
       
       onLogin()
     } catch (err) {
-      setError('Invalid PIN or server URL')
-      localStorage.removeItem('serverUrl')
+      setError('Invalid PIN')
     } finally {
       setLoading(false)
     }
@@ -46,18 +37,6 @@ export function LoginScreen({ onLogin, api }: LoginScreenProps) {
         <p className="subtitle">Mobile Access</p>
         
         <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label>Server URL</label>
-            <input
-              type="url"
-              value={serverUrl}
-              onChange={(e) => setServerUrl(e.target.value)}
-              placeholder="http://192.168.1.100:3000"
-              required
-              autoComplete="url"
-            />
-          </div>
-          
           <div className="form-group">
             <label>PIN Code</label>
             <input
@@ -81,7 +60,7 @@ export function LoginScreen({ onLogin, api }: LoginScreenProps) {
         </form>
         
         <p className="hint">
-          Find the server URL and PIN in your desktop app settings
+          Find the PIN in your desktop app settings
         </p>
       </div>
     </div>

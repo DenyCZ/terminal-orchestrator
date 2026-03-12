@@ -43,9 +43,15 @@ export interface WebUISettings {
   tunnel?: TunnelSettings;
 }
 
+export type TunnelMode = 'quick' | 'named';
+
 // Cloudflare Tunnel settings
 export interface TunnelSettings {
   enabled: boolean;
+  mode?: TunnelMode;
+  tunnelId?: string;
+  hostname?: string;
+  credentialsFile?: string;
 }
 
 // Keyboard shortcut types
@@ -280,7 +286,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
     allowRemote: false,
     showQRCode: true,
     tunnel: {
-      enabled: false
+      enabled: false,
+      mode: 'quick',
+      tunnelId: '',
+      hostname: '',
+      credentialsFile: ''
     }
   },
   predefinedTerminals: [],
